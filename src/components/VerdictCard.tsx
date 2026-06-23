@@ -115,10 +115,12 @@ export function VerdictCard({ result }: VerdictCardProps) {
 
           <div
             className="font-mono"
-            style={{ color:'#3d6060', fontSize:9, letterSpacing:'0.08em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%', border:'1px dashed rgba(255,255,255,0.08)', borderRadius:4, padding:'3px 8px' }}
+            style={{ color:'#5c8a8a', fontSize:10, fontWeight:700, letterSpacing:'0.08em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%', border:'1px dashed rgba(0,255,204,0.18)', borderRadius:4, padding:'4px 10px', background:'rgba(0,255,204,0.02)' }}
             title={result.tokenAddress}
           >
-            {truncateAddr(result.tokenAddress)}
+            {result.realTokenData 
+              ? `${result.realTokenData.name} (${result.realTokenData.symbol}) • ${truncateAddr(result.tokenAddress)}`
+              : truncateAddr(result.tokenAddress)}
           </div>
 
           <div

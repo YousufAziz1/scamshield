@@ -4,6 +4,7 @@ import { testnetBradbury, studionet } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 import { CONTRACT } from '@/lib/genlayer'
 import type { ScanState, ScanResult, Verdict, ValidatorVote } from '@/types'
+import { fetchTokenRealData } from '@/lib/tokenData'
 
 const STATUS_ORDER = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'accepted', 'finalized']
 
@@ -141,7 +142,7 @@ export function useGenLayer() {
   useEffect(() => { checkSnap() }, [checkSnap])
 
   // ── Build scan result from parsed JSON ───────────────────────────
-  function buildScanResult(parsed: any, tokenAddress: string, chainId: string, txHash: string): ScanResult {
+  function buildScanResult(parsed: any, tokenAddress: string, chainId: string, txHash: string, realData?: any): ScanResult {
     const score = parsed.riskScore ?? 50
     const votes: ValidatorVote[] = VALIDATOR_MASCOTS.map((m, i) => {
       let v: Verdict = 'SAFE'
@@ -160,6 +161,7 @@ export function useGenLayer() {
       validatorVotes: votes,
       scannedAt: Date.now(),
       txHash,
+      realTokenData: realData,
     }
   }
 
@@ -167,6 +169,14 @@ export function useGenLayer() {
   const scanToken = useCallback(async (tokenAddress: string, chainId: string, walletAddress: string) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     setScanState({ status: 'submitting' })
+
+    // Fetch real token data from DexScreener / GoPlus
+    let realData: any = null
+    try {
+      realData = await fetchTokenRealData(tokenAddress, chainId)
+    } catch (e) {
+      console.error('Failed to fetch real token data:', e)
+    }
 
     if (isSimulated) {
       // Simulate Scan!
@@ -187,34 +197,60 @@ export function useGenLayer() {
           let summaryStr = 'Contract conforms to standard ERC-20 token specifications. No blacklisted functions or proxy vulnerability vectors identified.'
           let flagsList: any[] = []
 
-          // Match quick scan targets
-          if (addrLower.includes('a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') || addrLower.includes('2260fac5e5542a773aa44fbcfedf7c193bc2c599') || addrLower.includes('1f9840a85d5af5bf1d1762f925bdaddc4201f984') || addrLower.includes('safe') || addrLower.includes('usdc') || addrLower.includes('wbtc') || addrLower.includes('uni')) {
-            score = 8 + Math.floor(Math.random() * 8)
-            verdictStr = 'SAFE'
-            summaryStr = `Decensus validation successful for ${tokenAddress.slice(0, 8)}. Token contract possesses verified source code, balanced liquidity allocations, and renounced administrator controls. No threat signatures found.`
-          } else if (addrLower.includes('4f128e6dbd1283c799a4e21a2c91a329d48b1111') || addrLower.includes('8076c74c5e3f5852037f31ff0093eeb8c8add8d3') || addrLower.includes('58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8') || addrLower.includes('risky') || addrLower.includes('scam') || addrLower.includes('honeypot') || addrLower.includes('safemoon') || addrLower.includes('squid')) {
-            score = 88 + Math.floor(Math.random() * 10)
-            verdictStr = 'SCAM'
-            summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk honeypot bytecode. Direct analysis identifies non-standard transfer taxes (up to 100%), blocked liquidity transfers, and unrenounced owner control permissions.`
-            flagsList = [
-              { severity: 'HIGH', title: 'Honeypot Bytecode Pattern', description: 'The contract contains execution logic that prevents token sellers from transferring tokens back to the liquidity pool.' },
-              { severity: 'HIGH', title: 'Variable Sell Tax', description: 'Transfer tax parameters can be dynamically set to 100% by the contract owner, preventing swaps.' },
-              { severity: 'MEDIUM', title: 'Unrenounced Ownership', description: 'Ownership is held by an active EOA address with permissions to modify critical parameters.' }
-            ]
-          } else {
-            const isEven = tokenAddress.length % 2 === 0
-            if (isEven) {
-              score = 10 + Math.floor(Math.random() * 15)
-              verdictStr = 'SAFE'
-              summaryStr = `Scan results check out. Contract structure follows standard patterns. No hidden functions or malicious parameters detected.`
-            } else {
-              score = 65 + Math.floor(Math.random() * 20)
+          if (realData) {
+            const hasHigh = realData.flags.some((f: any) => f.severity === 'HIGH')
+            const hasMed = realData.flags.some((f: any) => f.severity === 'MEDIUM')
+            
+            if (hasHigh) {
+              score = 85 + Math.floor(Math.random() * 12)
+              verdictStr = 'SCAM'
+              summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk security issues for ${realData.name} (${realData.symbol}). GoPlus analysis identified critical smart contract anomalies: ${realData.flags.map((f: any) => f.title).join(', ')}.`
+            } else if (hasMed) {
+              score = 45 + Math.floor(Math.random() * 20)
               verdictStr = 'RISKY'
-              summaryStr = `Warning: Elevated threat parameters found. Liquidity is locked for less than 30 days, and the contract features a high buy/sell tax (10%).`
+              summaryStr = `Warning: Elevated threat parameters found for ${realData.name} (${realData.symbol}). Token contract contains moderate risk indicators: ${realData.flags.map((f: any) => f.title).join(', ')}.`
+            } else {
+              score = 4 + Math.floor(Math.random() * 6)
+              verdictStr = 'SAFE'
+              summaryStr = `Decensus validation successful for ${realData.name} (${realData.symbol}). Token contract possesses active liquidity of $${realData.liquidity ? realData.liquidity.toLocaleString() : 'N/A'}, current price $${realData.price.toFixed(4)}, and no threat signatures found.`
+            }
+
+            flagsList = realData.flags.map((f: any, idx: number) => ({
+              id: `goplus-${idx}`,
+              severity: f.severity.toLowerCase(),
+              label: f.title,
+              detail: f.description
+            }))
+          } else {
+            // Match quick scan targets
+            if (addrLower.includes('a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') || addrLower.includes('2260fac5e5542a773aa44fbcfedf7c193bc2c599') || addrLower.includes('1f9840a85d5af5bf1d1762f925bdaddc4201f984') || addrLower.includes('safe') || addrLower.includes('usdc') || addrLower.includes('wbtc') || addrLower.includes('uni')) {
+              score = 8 + Math.floor(Math.random() * 8)
+              verdictStr = 'SAFE'
+              summaryStr = `Decensus validation successful for ${tokenAddress.slice(0, 8)}. Token contract possesses verified source code, balanced liquidity allocations, and renounced administrator controls. No threat signatures found.`
+            } else if (addrLower.includes('4f128e6dbd1283c799a4e21a2c91a329d48b1111') || addrLower.includes('8076c74c5e3f5852037f31ff0093eeb8c8add8d3') || addrLower.includes('58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8') || addrLower.includes('risky') || addrLower.includes('scam') || addrLower.includes('honeypot') || addrLower.includes('safemoon') || addrLower.includes('squid')) {
+              score = 88 + Math.floor(Math.random() * 10)
+              verdictStr = 'SCAM'
+              summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk honeypot bytecode. Direct analysis identifies non-standard transfer taxes (up to 100%), blocked liquidity transfers, and unrenounced owner control permissions.`
               flagsList = [
-                { severity: 'MEDIUM', title: 'High Transaction Fees', description: 'Transaction buy/sell fee is set to 10%, which exceeds standard utility parameters.' },
-                { severity: 'LOW', title: 'Short-term Liquidity Lock', description: 'Liquidity locker contract expires in less than 30 days, posing rug-pull risks.' }
+                { severity: 'high', label: 'Honeypot Bytecode Pattern', detail: 'The contract contains execution logic that prevents token sellers from transferring tokens back to the liquidity pool.' },
+                { severity: 'high', label: 'Variable Sell Tax', detail: 'Transfer tax parameters can be dynamically set to 100% by the contract owner, preventing swaps.' },
+                { severity: 'medium', label: 'Unrenounced Ownership', detail: 'Ownership is held by an active EOA address with permissions to modify critical parameters.' }
               ]
+            } else {
+              const isEven = tokenAddress.length % 2 === 0
+              if (isEven) {
+                score = 10 + Math.floor(Math.random() * 15)
+                verdictStr = 'SAFE'
+                summaryStr = `Scan results check out. Contract structure follows standard patterns. No hidden functions or malicious parameters detected.`
+              } else {
+                score = 65 + Math.floor(Math.random() * 20)
+                verdictStr = 'RISKY'
+                summaryStr = `Warning: Elevated threat parameters found. Liquidity is locked for less than 30 days, and the contract features a high buy/sell tax (10%).`
+                flagsList = [
+                  { severity: 'medium', label: 'High Transaction Fees', detail: 'Transaction buy/sell fee is set to 10%, which exceeds standard utility parameters.' },
+                  { severity: 'low', label: 'Short-term Liquidity Lock', detail: 'Liquidity locker contract expires in less than 30 days, posing rug-pull risks.' }
+                ]
+              }
             }
           }
 
@@ -225,7 +261,7 @@ export function useGenLayer() {
             flags: flagsList
           }
 
-          const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash)
+          const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData)
           setScanState({ status: 'finalized', txHash, result: scanResult })
         }
       }, 1000)
@@ -300,7 +336,7 @@ export function useGenLayer() {
               const rawResult = await client.readContract({ address: CONTRACT, functionName: 'get_scan_result', args: [tokenAddress] }) as string
               if (rawResult && rawResult.trim() !== '') {
                 clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-                const scanResult = buildScanResult(JSON.parse(rawResult), tokenAddress, chainId, txHash)
+                const scanResult = buildScanResult(JSON.parse(rawResult), tokenAddress, chainId, txHash, realData)
                 setScanState({ status: 'finalized', txHash, result: scanResult })
               }
             } catch (_) { /* wait */ }
@@ -323,7 +359,7 @@ export function useGenLayer() {
               clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
               const rawResult = await client.readContract({ address: CONTRACT, functionName: 'get_scan_result', args: [tokenAddress] }) as string
               if (!rawResult || rawResult.trim() === '') throw new Error('Consensus completed but no scan result was returned.')
-              const scanResult = buildScanResult(JSON.parse(rawResult), tokenAddress, chainId, txHash)
+              const scanResult = buildScanResult(JSON.parse(rawResult), tokenAddress, chainId, txHash, realData)
               setScanState({ status: 'finalized', txHash, result: scanResult })
             }
           }

@@ -252,17 +252,28 @@ export default function App() {
               {currentResult && !busy && (() => {
                 const r = currentResult
                 const isMal = r.verdict==='SCAM'||r.verdict==='RISKY'
-                const buyTax  = isMal ? '15' : '0'
-                const sellTax = isMal ? '25' : '0'
-                const supply  = isMal ? '1,000,000,000' : '4,000,000,000'
-                const liq     = isMal ? '$12,400' : '$2.4B'
-                const creator = isMal ? fmt(r.tokenAddress) : '0xSafe...addr'
+                
+                // Get real-time values or fallbacks
+                const buyTaxVal = r.realTokenData ? r.realTokenData.buyTax : (isMal ? '15' : '0')
+                const sellTaxVal = r.realTokenData ? r.realTokenData.sellTax : (isMal ? '25' : '0')
+                const taxLabel = `Buy ${buyTaxVal}% / Sell ${sellTaxVal}%`
+
+                const supply  = r.realTokenData?.totalSupply || (isMal ? '1,000,000,000' : '4,000,000,000')
+                
+                const liq     = r.realTokenData?.liquidity !== undefined && r.realTokenData.liquidity !== null 
+                                ? `$${r.realTokenData.liquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
+                                : (isMal ? '$12,400' : '$2.4B')
+                
+                const creator = r.realTokenData?.creator 
+                                ? (r.realTokenData.creator.startsWith('0x') ? fmt(r.realTokenData.creator) : r.realTokenData.creator) 
+                                : (isMal ? fmt(r.tokenAddress) : '0xSafe...addr')
+
                 return (
                   <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
                     {[
                       {label:'TOTAL SUPPLY', value:supply,       icon:'⬡'},
                       {label:'CREATOR',      value:creator,      icon:'👤'},
-                      {label:'TAX',          value:`Buy ${buyTax}% / Sell ${sellTax}%`, icon:'⚡'},
+                      {label:'TAX',          value:taxLabel,     icon:'⚡'},
                       {label:'LIQUIDITY',    value:liq,          icon:'💧'},
                     ].map(s => (
                       <div key={s.label} style={{background:'#041414',border:'1px solid rgba(0,255,204,0.12)',borderRadius:8,padding:'10px 12px'}}>

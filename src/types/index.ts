@@ -35,6 +35,17 @@ export interface ScanResult {
   validatorVotes: ValidatorVote[]
   scannedAt: number
   txHash: string
+  realTokenData?: {
+    name: string
+    symbol: string
+    price: number
+    liquidity: number | null
+    fdv: number | null
+    totalSupply: string
+    creator: string
+    buyTax: string
+    sellTax: string
+  }
 }
 
 export interface ScanState {
