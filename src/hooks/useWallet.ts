@@ -7,11 +7,23 @@ export interface WalletState {
   error: string | null
 }
 
+interface RpcError extends Error {
+  code?: number
+}
+
+interface EthereumWindow {
+  ethereum?: {
+    request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>
+    on: (event: string, callback: (...args: unknown[]) => void) => void
+    removeListener?: (event: string, callback: (...args: unknown[]) => void) => void
+  }
+}
+
 export function useWallet() {
   const [wallet, setWallet] = useState<WalletState>(
     () => {
       const saved = localStorage.getItem('scamshield_wallet')
-      const fallback = (typeof window === 'undefined' || !window.ethereum) 
+      const fallback = (typeof window === 'undefined' || !(window as unknown as EthereumWindow).ethereum) 
         ? '0x71C7656EC7ab88b098defB751B7401B5f6d8976F' 
         : null
       return {
@@ -23,7 +35,8 @@ export function useWallet() {
   )
 
   const connect = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
+    const eth = (window as unknown as EthereumWindow).ethereum
+    if (typeof window === 'undefined' || !eth) {
       const mockAddress = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F'
       localStorage.setItem('scamshield_wallet', mockAddress)
       setWallet({
@@ -37,8 +50,8 @@ export function useWallet() {
     setWallet(prev => ({ ...prev, isConnecting: true, error: null }))
     try {
       // Request account access
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[]
-      if (accounts.length === 0) {
+      const accounts = (await eth.request({ method: 'eth_requestAccounts' })) as string[]
+      if (!accounts || accounts.length === 0) {
         throw new Error('No accounts returned')
       }
       
@@ -51,18 +64,18 @@ export function useWallet() {
       })
 
       // Switch chain to Bradbury testnet if needed
-      // Bradbury testnet chain ID is usually 14211 or similar, we can check from testnetBradbury.id
       const chainIdHex = `0x${testnetBradbury.id.toString(16)}`
       try {
-        await window.ethereum.request({
+        await eth.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: chainIdHex }],
         })
-      } catch (switchError: any) {
+      } catch (switchError: unknown) {
+        const rpcErr = switchError as RpcError
         // If the chain hasn't been added, add it
-        if (switchError.code === 4902) {
+        if (rpcErr.code === 4902) {
           try {
-            await window.ethereum.request({
+            await eth.request({
               method: 'wallet_addEthereumChain',
               params: [
                 {
@@ -81,11 +94,11 @@ export function useWallet() {
           console.error('Failed to switch network', switchError)
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setWallet(prev => ({
         ...prev,
         isConnecting: false,
-        error: err.message || 'Connection failed',
+        error: err instanceof Error ? err.message : 'Connection failed',
       }))
     }
   }, [])
@@ -101,11 +114,12 @@ export function useWallet() {
 
   // Listen for account changes
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.ethereum) return
+    const eth = (window as unknown as EthereumWindow).ethereum
+    if (typeof window === 'undefined' || !eth) return
 
     const handleAccountsChanged = (accounts: unknown) => {
       const accs = accounts as string[]
-      if (accs.length === 0) {
+      if (!accs || accs.length === 0) {
         disconnect()
       } else {
         localStorage.setItem('scamshield_wallet', accs[0])
@@ -118,17 +132,16 @@ export function useWallet() {
     }
 
     const handleChainChanged = () => {
-      // Reload page or re-verify
       window.location.reload()
     }
 
-    window.ethereum.on('accountsChanged', handleAccountsChanged)
-    window.ethereum.on('chainChanged', handleChainChanged)
+    eth.on('accountsChanged', handleAccountsChanged)
+    eth.on('chainChanged', handleChainChanged)
 
     return () => {
-      if (window.ethereum?.removeListener) {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
-        window.ethereum.removeListener('chainChanged', handleChainChanged)
+      if (eth.removeListener) {
+        eth.removeListener('accountsChanged', handleAccountsChanged)
+        eth.removeListener('chainChanged', handleChainChanged)
       }
     }
   }, [disconnect])

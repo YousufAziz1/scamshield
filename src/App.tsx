@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { Shield, AlertCircle, X, Cpu, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react'
 import { useGenLayer, VALIDATOR_MASCOTS } from '@/hooks/useGenLayer'
@@ -32,11 +32,15 @@ export default function App() {
   const busy = isScanning || scanState.status === 'accepted'
   const isMalicious = !!(currentResult && (currentResult.verdict==='SCAM'||currentResult.verdict==='RISKY'))
 
+  const lastProcessedTxRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (scanState.result && !viewingScan && !recentScans.find(s => s.txHash===scanState.result?.txHash)) {
-      setRecentScans(prev => [scanState.result!, ...prev.slice(0,9)])
+    const res = scanState.result
+    if (res && res.txHash && lastProcessedTxRef.current !== res.txHash) {
+      lastProcessedTxRef.current = res.txHash
+      setRecentScans(prev => [res, ...prev.filter(s => s.txHash !== res.txHash).slice(0, 9)])
     }
-  }, [scanState.result, viewingScan, recentScans])
+  }, [scanState.result])
 
   function handleScan(addr: string, chain: string) {
     if (!wallet.address) { connect(); return }
@@ -52,7 +56,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="monitor-outer">
-        <div className="monitor-screen" style={{'--accent': accentVar} as any}>
+        <div className="monitor-screen" style={{'--accent': accentVar} as React.CSSProperties}>
           <div className="absolute inset-0 bg-cyber-grid z-0" />
           <div className="scanlines" />
           <div className="monitor-reflection" />
@@ -252,21 +256,22 @@ export default function App() {
               {currentResult && !busy && (() => {
                 const r = currentResult
                 const isMal = r.verdict==='SCAM'||r.verdict==='RISKY'
+                const isUnk = r.verdict==='UNKNOWN'
                 
                 // Get real-time values or fallbacks
-                const buyTaxVal = r.realTokenData ? r.realTokenData.buyTax : (isMal ? '15' : '0')
-                const sellTaxVal = r.realTokenData ? r.realTokenData.sellTax : (isMal ? '25' : '0')
-                const taxLabel = `Buy ${buyTaxVal}% / Sell ${sellTaxVal}%`
+                const buyTaxVal = r.realTokenData ? r.realTokenData.buyTax : (isMal ? '15' : isUnk ? '0' : '0')
+                const sellTaxVal = r.realTokenData ? r.realTokenData.sellTax : (isMal ? '25' : isUnk ? '0' : '0')
+                const taxLabel = isUnk && !r.realTokenData?.isVerified ? 'N/A' : `Buy ${buyTaxVal}% / Sell ${sellTaxVal}%`
 
-                const supply  = r.realTokenData?.totalSupply || (isMal ? '1,000,000,000' : '4,000,000,000')
+                const supply  = r.realTokenData?.totalSupply || (isUnk ? 'N/A' : isMal ? '1,000,000,000' : '4,000,000,000')
                 
                 const liq     = r.realTokenData?.liquidity !== undefined && r.realTokenData.liquidity !== null 
                                 ? `$${r.realTokenData.liquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
-                                : (isMal ? '$12,400' : '$2.4B')
+                                : (isUnk ? 'N/A' : isMal ? '$12,400' : '$2.4B')
                 
                 const creator = r.realTokenData?.creator 
                                 ? (r.realTokenData.creator.startsWith('0x') ? fmt(r.realTokenData.creator) : r.realTokenData.creator) 
-                                : (isMal ? fmt(r.tokenAddress) : '0xSafe...addr')
+                                : fmt(r.tokenAddress)
 
                 return (
                   <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>

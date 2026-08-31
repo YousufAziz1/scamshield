@@ -3,8 +3,8 @@ import { createClient } from 'genlayer-js'
 import { testnetBradbury, studionet } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 import { CONTRACT } from '@/lib/genlayer'
-import type { ScanState, ScanResult, Verdict, ValidatorVote } from '@/types'
-import { fetchTokenRealData } from '@/lib/tokenData'
+import type { ScanState, ScanResult, Verdict, ValidatorVote, RiskFlag } from '@/types'
+import { fetchTokenRealData, type RealTokenData } from '@/lib/tokenData'
 
 const STATUS_ORDER = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'accepted', 'finalized']
 
@@ -16,6 +16,13 @@ export const VALIDATOR_MASCOTS = [
   { id: '04', emoji: '🐱', code: 'CAT-NODE'  },
   { id: '05', emoji: '🛡️', code: 'SHIELD-NODE' },
 ]
+
+interface ParsedContractResult {
+  verdict?: Verdict
+  riskScore?: number
+  summary?: string
+  flags?: RiskFlag[]
+}
 
 export function useGenLayer() {
   const [scanState, setScanState] = useState<ScanState>({ status: 'idle' })
@@ -55,8 +62,8 @@ export function useGenLayer() {
         return true
       }
       try {
-        const snaps = await provider.request({ method: 'wallet_getSnaps' })
-        const installed = !!snaps && ('npm:genlayer-snap' in (snaps as any))
+        const snaps = (await provider.request({ method: 'wallet_getSnaps' })) as Record<string, unknown> | null
+        const installed = !!snaps && ('npm:genlayer-snap' in snaps)
         setIsSnapInstalled(installed)
         if (installed) { 
           setConnectionStatus('connected')
@@ -67,8 +74,8 @@ export function useGenLayer() {
           setConnectionStatus('disconnected') 
         }
         return installed
-      } catch (snapErr: any) {
-        const msg = (snapErr.message || String(snapErr)).toLowerCase()
+      } catch (snapErr: unknown) {
+        const msg = (snapErr instanceof Error ? snapErr.message : String(snapErr)).toLowerCase()
         if (
           msg.includes('handler') || msg.includes('not supported') ||
           msg.includes('not implemented') || msg.includes('method_not_found') ||
@@ -84,10 +91,10 @@ export function useGenLayer() {
         }
         throw snapErr
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsSnapInstalled(false)
       setConnectionStatus('error')
-      setConnectionError(err.message || String(err))
+      setConnectionError(err instanceof Error ? err.message : String(err))
       setIsSimulated(false)
       return false
     }
@@ -105,9 +112,9 @@ export function useGenLayer() {
       }
       setConnectionStatus('connecting')
       try {
-        await (provider as any).request({ method: 'wallet_requestSnaps', params: { 'npm:genlayer-snap': {} } })
-      } catch (snapErr: any) {
-        const msg = (snapErr.message || String(snapErr)).toLowerCase()
+        await provider.request({ method: 'wallet_requestSnaps', params: { 'npm:genlayer-snap': {} } })
+      } catch (snapErr: unknown) {
+        const msg = (snapErr instanceof Error ? snapErr.message : String(snapErr)).toLowerCase()
         if (
           msg.includes('handler') || msg.includes('not supported') ||
           msg.includes('not implemented') || msg.includes('method_not_found') ||
@@ -132,28 +139,38 @@ export function useGenLayer() {
       } else {
         throw new Error('GenLayer Snap installation was requested but is not showing up in installed snaps.')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsSnapInstalled(false)
       setConnectionStatus('error')
-      setConnectionError(err.message || String(err))
+      setConnectionError(err instanceof Error ? err.message : String(err))
     }
   }, [checkSnap])
 
-  useEffect(() => { checkSnap() }, [checkSnap])
+  useEffect(() => { void checkSnap() }, [checkSnap])
 
   // ── Build scan result from parsed JSON ───────────────────────────
-  function buildScanResult(parsed: any, tokenAddress: string, chainId: string, txHash: string, realData?: any): ScanResult {
+  function buildScanResult(parsed: ParsedContractResult, tokenAddress: string, chainId: string, txHash: string, realData?: RealTokenData | null): ScanResult {
     const score = parsed.riskScore ?? 50
+    const rawVerdict = parsed.verdict ?? (score > 70 ? 'SCAM' : score > 30 ? 'RISKY' : 'SAFE')
+
     const votes: ValidatorVote[] = VALIDATOR_MASCOTS.map((m, i) => {
-      let v: Verdict = 'SAFE'
-      if (score > 70) v = i >= 3 ? 'RISKY' : 'SCAM'
-      else if (score > 30) v = i === 0 ? 'SAFE' : i === 4 ? 'SCAM' : 'RISKY'
-      else v = i === 0 ? 'RISKY' : 'SAFE'
-      return { validatorId: m.id, vote: v, confidence: 0.78 + Math.random() * 0.2 }
+      let v: Verdict
+      if (rawVerdict === 'UNKNOWN') {
+        v = 'UNKNOWN'
+      } else if (score > 70) {
+        v = i >= 4 ? 'RISKY' : 'SCAM'
+      } else if (score > 30) {
+        v = i === 0 ? 'SAFE' : i === 4 ? 'SCAM' : 'RISKY'
+      } else {
+        v = i === 0 ? 'RISKY' : 'SAFE'
+      }
+      return { validatorId: m.id, vote: v, confidence: 0.85 + (i * 0.02) }
     })
+
     return {
-      tokenAddress, chainId,
-      verdict: parsed.verdict ?? 'UNKNOWN',
+      tokenAddress,
+      chainId,
+      verdict: rawVerdict,
       riskScore: score,
       summary: parsed.summary ?? 'Analysis complete.',
       consensusReached: true,
@@ -161,7 +178,7 @@ export function useGenLayer() {
       validatorVotes: votes,
       scannedAt: Date.now(),
       txHash,
-      realTokenData: realData,
+      realTokenData: realData ?? undefined,
     }
   }
 
@@ -170,8 +187,8 @@ export function useGenLayer() {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     setScanState({ status: 'submitting' })
 
-    // Fetch real token data from DexScreener / GoPlus
-    let realData: any = null
+    // Fetch real token / NFT data from DexScreener / GoPlus
+    let realData: RealTokenData | null = null
     try {
       realData = await fetchTokenRealData(tokenAddress, chainId)
     } catch (e) {
@@ -179,12 +196,12 @@ export function useGenLayer() {
     }
 
     if (isSimulated) {
-      // Simulate Scan!
+      // Simulation mode
       let stageIdx = 0
       const stages: ScanState['status'][] = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'finalized']
       const txHash = '0xsim' + Math.random().toString(16).slice(2, 10) + '...' + Math.random().toString(16).slice(2, 6)
       
-      const interval = setInterval(() => {
+      const interval = window.setInterval(() => {
         stageIdx++
         if (stageIdx < stages.length - 1) {
           setScanState({ status: stages[stageIdx], txHash })
@@ -192,69 +209,60 @@ export function useGenLayer() {
           clearInterval(interval)
           // Build final result
           const addrLower = tokenAddress.toLowerCase()
-          let score = 8
-          let verdictStr: Verdict = 'SAFE'
-          let summaryStr = 'Contract conforms to standard ERC-20 token specifications. No blacklisted functions or proxy vulnerability vectors identified.'
-          let flagsList: any[] = []
+          let score: number
+          let verdictStr: Verdict
+          let summaryStr: string
+          let flagsList: RiskFlag[] = []
 
-          if (realData) {
-            const hasHigh = realData.flags.some((f: any) => f.severity === 'HIGH')
-            const hasMed = realData.flags.some((f: any) => f.severity === 'MEDIUM')
+          if (realData && realData.isVerified) {
+            const hasHigh = realData.flags.some(f => f.severity === 'HIGH')
+            const hasMed = realData.flags.some(f => f.severity === 'MEDIUM')
             
             if (hasHigh) {
-              score = 85 + Math.floor(Math.random() * 12)
+              score = 88
               verdictStr = 'SCAM'
-              summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk security issues for ${realData.name} (${realData.symbol}). GoPlus analysis identified critical smart contract anomalies: ${realData.flags.map((f: any) => f.title).join(', ')}.`
+              summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk security issues for ${realData.name} (${realData.symbol}). GoPlus analysis identified critical anomalies: ${realData.flags.map(f => f.title).join(', ')}.`
             } else if (hasMed) {
-              score = 45 + Math.floor(Math.random() * 20)
+              score = 55
               verdictStr = 'RISKY'
-              summaryStr = `Warning: Elevated threat parameters found for ${realData.name} (${realData.symbol}). Token contract contains moderate risk indicators: ${realData.flags.map((f: any) => f.title).join(', ')}.`
+              summaryStr = `Warning: Elevated threat parameters found for ${realData.name} (${realData.symbol}). Token contract contains moderate risk indicators: ${realData.flags.map(f => f.title).join(', ')}.`
             } else {
-              score = 4 + Math.floor(Math.random() * 6)
+              score = 8
               verdictStr = 'SAFE'
-              summaryStr = `Decensus validation successful for ${realData.name} (${realData.symbol}). Token contract possesses active liquidity of $${realData.liquidity ? realData.liquidity.toLocaleString() : 'N/A'}, current price $${realData.price.toFixed(4)}, and no threat signatures found.`
+              summaryStr = `Consensus validation complete for ${realData.name} (${realData.symbol}). Authoritative metadata verified on ${chainId.toUpperCase()}. No threat indicators identified.`
             }
 
-            flagsList = realData.flags.map((f: any, idx: number) => ({
+            flagsList = realData.flags.map((f, idx) => ({
               id: `goplus-${idx}`,
-              severity: f.severity.toLowerCase(),
+              severity: f.severity.toLowerCase() as RiskFlag['severity'],
               label: f.title,
               detail: f.description
             }))
           } else {
-            // Match quick scan targets
-            if (addrLower.includes('a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') || addrLower.includes('2260fac5e5542a773aa44fbcfedf7c193bc2c599') || addrLower.includes('1f9840a85d5af5bf1d1762f925bdaddc4201f984') || addrLower.includes('safe') || addrLower.includes('usdc') || addrLower.includes('wbtc') || addrLower.includes('uni')) {
-              score = 8 + Math.floor(Math.random() * 8)
+            // Match quick scan demo targets
+            if (addrLower.includes('a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') || addrLower.includes('2260fac5e5542a773aa44fbcfedf7c193bc2c599') || addrLower.includes('1f9840a85d5af5bf1d1762f925bdaddc4201f984')) {
+              score = 5
               verdictStr = 'SAFE'
-              summaryStr = `Decensus validation successful for ${tokenAddress.slice(0, 8)}. Token contract possesses verified source code, balanced liquidity allocations, and renounced administrator controls. No threat signatures found.`
-            } else if (addrLower.includes('4f128e6dbd1283c799a4e21a2c91a329d48b1111') || addrLower.includes('8076c74c5e3f5852037f31ff0093eeb8c8add8d3') || addrLower.includes('58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8') || addrLower.includes('risky') || addrLower.includes('scam') || addrLower.includes('honeypot') || addrLower.includes('safemoon') || addrLower.includes('squid')) {
-              score = 88 + Math.floor(Math.random() * 10)
+              summaryStr = `Consensus validation successful for verified reference token (${tokenAddress.slice(0, 8)}). Contract conforms to standard specifications with verified source code.`
+            } else if (addrLower.includes('4f128e6dbd1283c799a4e21a2c91a329d48b1111') || addrLower.includes('8076c74c5e3f5852037f31ff0093eeb8c8add8d3') || addrLower.includes('58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8')) {
+              score = 92
               verdictStr = 'SCAM'
               summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk honeypot bytecode. Direct analysis identifies non-standard transfer taxes (up to 100%), blocked liquidity transfers, and unrenounced owner control permissions.`
               flagsList = [
-                { severity: 'high', label: 'Honeypot Bytecode Pattern', detail: 'The contract contains execution logic that prevents token sellers from transferring tokens back to the liquidity pool.' },
-                { severity: 'high', label: 'Variable Sell Tax', detail: 'Transfer tax parameters can be dynamically set to 100% by the contract owner, preventing swaps.' },
-                { severity: 'medium', label: 'Unrenounced Ownership', detail: 'Ownership is held by an active EOA address with permissions to modify critical parameters.' }
+                { id: 'honeypot_bytecode', severity: 'high', label: 'Honeypot Bytecode Pattern', detail: 'The contract contains execution logic that prevents token sellers from transferring tokens back to the liquidity pool.' },
+                { id: 'variable_tax', severity: 'high', label: 'Variable Sell Tax', detail: 'Transfer tax parameters can be dynamically set to 100% by the contract owner, preventing swaps.' },
+                { id: 'unrenounced_owner', severity: 'medium', label: 'Unrenounced Ownership', detail: 'Ownership is held by an active EOA address with permissions to modify critical parameters.' }
               ]
             } else {
-              const isEven = tokenAddress.length % 2 === 0
-              if (isEven) {
-                score = 10 + Math.floor(Math.random() * 15)
-                verdictStr = 'SAFE'
-                summaryStr = `Scan results check out. Contract structure follows standard patterns. No hidden functions or malicious parameters detected.`
-              } else {
-                score = 65 + Math.floor(Math.random() * 20)
-                verdictStr = 'RISKY'
-                summaryStr = `Warning: Elevated threat parameters found. Liquidity is locked for less than 30 days, and the contract features a high buy/sell tax (10%).`
-                flagsList = [
-                  { severity: 'medium', label: 'High Transaction Fees', detail: 'Transaction buy/sell fee is set to 10%, which exceeds standard utility parameters.' },
-                  { severity: 'low', label: 'Short-term Liquidity Lock', detail: 'Liquidity locker contract expires in less than 30 days, posing rug-pull risks.' }
-                ]
-              }
+              // Unverified / Unknown contract: strictly return UNKNOWN
+              score = 50
+              verdictStr = 'UNKNOWN'
+              summaryStr = 'Unable to verify token identity or security parameters. No authoritative market or contract metadata found on the selected network.'
+              flagsList = []
             }
           }
 
-          const parsed = {
+          const parsed: ParsedContractResult = {
             verdict: verdictStr,
             riskScore: score,
             summary: summaryStr,
@@ -266,7 +274,7 @@ export function useGenLayer() {
         }
       }, 1000)
 
-      pollIntervalRef.current = interval as any
+      pollIntervalRef.current = interval
       return
     }
 
@@ -276,11 +284,11 @@ export function useGenLayer() {
 
       // Snap check
       try {
-        const snaps = await provider.request({ method: 'wallet_getSnaps' })
-        const installed = !!snaps && ('npm:genlayer-snap' in (snaps as any))
+        const snaps = (await provider.request({ method: 'wallet_getSnaps' })) as Record<string, unknown> | null
+        const installed = !!snaps && ('npm:genlayer-snap' in snaps)
         if (!installed) throw new Error('GenLayer MetaMask Snap is not installed. Please click "Install GenLayer Snap".')
-      } catch (snapErr: any) {
-        const msg = (snapErr.message || String(snapErr)).toLowerCase()
+      } catch (snapErr: unknown) {
+        const msg = (snapErr instanceof Error ? snapErr.message : String(snapErr)).toLowerCase()
         if (!(msg.includes('handler') || msg.includes('not supported') || msg.includes('not implemented') || msg.includes('method_not_found') || msg.includes('parse error') || msg.includes('does not support') || msg.includes("doesn't has"))) {
           throw snapErr
         }
@@ -288,14 +296,14 @@ export function useGenLayer() {
 
       // Create client
       const activeChain = isStudioMode ? studionet : testnetBradbury
-      const client = createClient({ chain: activeChain, account: walletAddress as `0x${string}`, provider: window.ethereum })
+      const client = createClient({ chain: activeChain, account: walletAddress as `0x${string}`, provider: window.ethereum as unknown as NonNullable<Parameters<typeof createClient>[0]>['provider'] })
 
       // Connect
       const activeChainName = isStudioMode ? 'studionet' : 'testnetBradbury'
       try {
         await client.connect(activeChainName)
-      } catch (connErr: any) {
-        const msg = (connErr.message || String(connErr)).toLowerCase()
+      } catch (connErr: unknown) {
+        const msg = (connErr instanceof Error ? connErr.message : String(connErr)).toLowerCase()
         if (!(msg.includes('handler') || msg.includes('not supported') || msg.includes('not implemented') || msg.includes('method_not_found') || msg.includes('parse error') || msg.includes('does not support') || msg.includes("doesn't has"))) {
           throw connErr
         }
@@ -320,7 +328,10 @@ export function useGenLayer() {
 
           // 3-minute timeout
           if (elapsed > 180_000) {
-            clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
             setScanState(prev => ({ ...prev, status: 'error', error: 'Consensus timed out after 3 minutes. Try resetting and scanning again.' }))
             return
           }
@@ -333,13 +344,19 @@ export function useGenLayer() {
             }
 
             try {
-              const rawResult = await client.readContract({ address: CONTRACT, functionName: 'get_scan_result', args: [tokenAddress] }) as string
+              const rawResult = (await client.readContract({ address: CONTRACT, functionName: 'get_scan_result', args: [tokenAddress] })) as string
               if (rawResult && rawResult.trim() !== '') {
-                clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-                const scanResult = buildScanResult(JSON.parse(rawResult), tokenAddress, chainId, txHash, realData)
+                if (pollIntervalRef.current) {
+                  clearInterval(pollIntervalRef.current)
+                  pollIntervalRef.current = null
+                }
+                const parsed = JSON.parse(rawResult) as ParsedContractResult
+                const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData)
                 setScanState({ status: 'finalized', txHash, result: scanResult })
               }
-            } catch (_) { /* wait */ }
+            } catch {
+              // Waiting for result to be available in storage
+            }
 
           } else {
             const tx = await client.getTransaction({ hash: txHash })
@@ -356,24 +373,34 @@ export function useGenLayer() {
             setScanState(prev => ({ ...prev, status: nextStatus === 'pending' && prev.status !== 'submitting' ? prev.status : nextStatus }))
 
             if (nextStatus === 'accepted' || nextStatus === 'finalized') {
-              clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-              const rawResult = await client.readContract({ address: CONTRACT, functionName: 'get_scan_result', args: [tokenAddress] }) as string
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              const rawResult = (await client.readContract({ address: CONTRACT, functionName: 'get_scan_result', args: [tokenAddress] })) as string
               if (!rawResult || rawResult.trim() === '') throw new Error('Consensus completed but no scan result was returned.')
-              const scanResult = buildScanResult(JSON.parse(rawResult), tokenAddress, chainId, txHash, realData)
+              const parsed = JSON.parse(rawResult) as ParsedContractResult
+              const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData)
               setScanState({ status: 'finalized', txHash, result: scanResult })
             }
           }
-        } catch (pollErr: any) {
-          clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-          setScanState(prev => ({ ...prev, status: 'error', error: pollErr.message || 'Error during consensus polling.' }))
+        } catch (pollErr: unknown) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          setScanState(prev => ({ ...prev, status: 'error', error: pollErr instanceof Error ? pollErr.message : 'Error during consensus polling.' }))
         }
       }, 3000)
 
-    } catch (err: any) {
-      if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null }
-      setScanState({ status: 'error', error: err.message || 'Failed to start live GenLayer scan.' })
+    } catch (err: unknown) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+      setScanState({ status: 'error', error: err instanceof Error ? err.message : 'Failed to start live GenLayer scan.' })
     }
-  }, [checkSnap, isStudioMode, isSimulated])
+  }, [isStudioMode, isSimulated])
 
   return {
     scanState, scanToken, reset,

@@ -23,9 +23,7 @@ class ScamTokenDetector(gl.Contract):
         cfg = supported_chains.get(chain_id.lower(), {'goplus': '1', 'dex': 'ethereum'})
         is_solana = chain_id.lower() == 'solana'
 
-        # Fetch all external data and build a rich prompt for the AI
-        # Using prompt_non_comparative so only the leader validator fetches web data;
-        # other validators verify the AI output meets the criteria instead of re-running fetches.
+        # Fetch external market and security data for validator consensus prompt
         def build_analysis_prompt() -> str:
             # ── 1. DexScreener (all chains) ──
             dex_data = '{}'
@@ -39,8 +37,8 @@ class ScamTokenDetector(gl.Contract):
             except Exception:
                 pass
 
-            # ── 2. GoPlus Security (EVM chains only) ──
-            goplus_data = '{}'
+            # ── 2. GoPlus Token Security (EVM chains) ──
+            goplus_token_data = '{}'
             if not is_solana:
                 try:
                     gp_url = (
@@ -51,11 +49,27 @@ class ScamTokenDetector(gl.Contract):
                     if gp_resp.status_code == 200:
                         body = gp_resp.body.decode('utf-8')
                         if len(body) > 20:
-                            goplus_data = body[:3000]
+                            goplus_token_data = body[:3000]
                 except Exception:
                     pass
 
-            # ── 3. Birdeye (Solana only — better coverage than GoPlus) ──
+            # ── 3. GoPlus NFT Security (EVM chains) ──
+            goplus_nft_data = '{}'
+            if not is_solana:
+                try:
+                    nft_url = (
+                        f"https://api.gopluslabs.io/api/v1/nft_security/{cfg['goplus']}"
+                        f"?contract_addresses={token_address}"
+                    )
+                    nft_resp = gl.nondet.web.get(nft_url)
+                    if nft_resp.status_code == 200:
+                        body = nft_resp.body.decode('utf-8')
+                        if len(body) > 20:
+                            goplus_nft_data = body[:3000]
+                except Exception:
+                    pass
+
+            # ── 4. Birdeye (Solana only) ──
             birdeye_data = '{}'
             if is_solana:
                 try:
@@ -69,17 +83,21 @@ class ScamTokenDetector(gl.Contract):
                     pass
 
             has_live_data = (
-                dex_data not in ('{}', '') or
-                goplus_data not in ('{}', '') or
+                dex_data not in ('{}', '', '{"schemaVersion":"1.0.0","pairs":null}') or
+                goplus_token_data not in ('{}', '', '{"code":1,"message":"OK","result":{}}') or
+                goplus_nft_data not in ('{}', '', '{"code":1,"message":"OK","result":{}}') or
                 birdeye_data not in ('{}', '')
             )
 
             data_section = f"""
-=== DexScreener Data ===
+=== DexScreener Market Data ===
 {dex_data}
 
-=== GoPlus Security Data ===
-{goplus_data}
+=== GoPlus Token Security Data ===
+{goplus_token_data}
+
+=== GoPlus NFT Security Data ===
+{goplus_nft_data}
 """
             if is_solana:
                 data_section += f"""
@@ -90,62 +108,59 @@ class ScamTokenDetector(gl.Contract):
             fallback_note = ""
             if not has_live_data:
                 fallback_note = """
-NOTE: No live API data was retrieved. Use your training knowledge about this specific
-token address and name to determine the verdict. Do NOT default to RISKY or SCAM
-simply because API data is unavailable.
+CRITICAL NOTICE: No authoritative market or contract metadata was found for this contract address on the specified network.
+You MUST strictly return VERDICT "UNKNOWN" with riskScore 50.
+Do NOT guess or substitute the identity of any other token or project.
 """
 
-            return f"""You are a blockchain security expert specializing in token scam detection.
+            return f"""You are an objective blockchain security analyst validating contract parameters and token threats.
 
-Token Address : {token_address}
-Chain         : {chain_id}
+Target Contract Address : {token_address}
+Target Network / Chain : {chain_id}
 
 {data_section}
 {fallback_note}
 
-INSTRUCTIONS:
-1. Analyze the token using BOTH the API data above AND your prior knowledge.
-2. Well-known legitimate tokens (USDC, USDT, WETH, WBTC, BNB, UNI, LAYER/Solayer,
-   SOL, ETH, MATIC, ARB, etc.) must be marked SAFE with a low riskScore (0-20).
-3. Only mark SCAM or RISKY if the data explicitly shows scam indicators such as:
-   - Honeypot (cannot sell, extreme buy/sell tax)
-   - Blacklist functions targeting holders
-   - Minting authority abused after launch
-   - Rug-pull: LP removed / unlocked
-   - Clone of a well-known project with a deceptive name
-4. If truly no information exists, return UNKNOWN with riskScore 50.
+STRICT ANALYSIS RULES:
+1. Verify the contract address strictly against the target network ({chain_id}).
+2. Token/project identity MUST be derived exclusively from the authoritative contract/network metadata provided above.
+3. NEVER substitute another token or project name when identity resolution fails or when data is missing.
+4. If no authoritative metadata or active liquidity exists on the target network, return VERDICT "UNKNOWN", riskScore 50, and summary "Unable to verify token identity or security parameters. No authoritative market or contract metadata found on the selected network."
+5. If the contract is a verified token or NFT with no malicious indicators, return VERDICT "SAFE" with an appropriate low risk score.
+6. Only return "SCAM" or "RISKY" if clear malicious parameters are present (such as honeypots, transfer blocks, malicious NFT logic, or 100% sell tax).
 
-RESPOND ONLY with valid JSON — no markdown, no extra text:
+RESPOND EXCLUSIVELY WITH VALID JSON (no markdown formatting, no commentary):
 {{
   "verdict": "SAFE" | "RISKY" | "SCAM" | "UNKNOWN",
   "riskScore": <integer 0-100>,
-  "summary": "<2-sentence explanation of the verdict>",
+  "summary": "<clear 1-2 sentence explanation of the finding>",
   "flags": [
     {{
-      "id": "<short_snake_case_id>",
+      "id": "<snake_case_id>",
       "severity": "critical" | "high" | "medium" | "low" | "info",
-      "label": "<short flag name>",
-      "detail": "<one sentence explanation>"
+      "label": "<short flag title>",
+      "detail": "<concise description of the flag>"
     }}
   ]
 }}
 """
 
-        # Validators verify the JSON structure and that legitimate tokens aren't wrongly flagged
+        # Validator consensus configuration
         verdict_json_str = gl.eq_principle.prompt_non_comparative(
             build_analysis_prompt,
             task=(
-                "Analyze the token security using the provided API data and your training knowledge. "
-                "Return a structured JSON verdict with verdict, riskScore, summary, and flags."
+                "Analyze token and smart contract security using retrieved network and security data. "
+                "Output a strictly formatted JSON verdict containing verdict, riskScore, summary, and flags."
             ),
             criteria=(
-                "The response must be valid JSON containing: "
-                "verdict (one of SAFE/RISKY/SCAM/UNKNOWN), "
-                "riskScore (integer 0-100), "
-                "summary (non-empty string), "
-                "flags (array, may be empty). "
-                "Well-known legitimate tokens (USDC, USDT, WETH, BNB, UNI, LAYER, etc.) "
-                "must have verdict SAFE and riskScore <= 25 unless clear scam data is present."
+                "The output must be strictly valid JSON with: "
+                "verdict (one of 'SAFE', 'RISKY', 'SCAM', 'UNKNOWN'), "
+                "riskScore (integer between 0 and 100), "
+                "summary (non-empty descriptive string), and "
+                "flags (list of flag objects). "
+                "Identity and security evaluation must be derived strictly from the provided contract metadata on the selected chain. "
+                "If metadata is missing or unverified, the verdict MUST be UNKNOWN with riskScore 50. "
+                "Never substitute another project's identity."
             )
         )
 

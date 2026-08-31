@@ -34,8 +34,8 @@ function FlagItem({ flag, index }: { flag: RiskFlag; index: number }) {
   const [open, setOpen] = useState(false)
   const sev  = normSeverity(flag.severity)
   const cfg  = SEVERITY_CONFIG[sev] || SEVERITY_CONFIG['info']
-  const label  = flag.label || (flag as any).title || 'Vulnerability Alert'
-  const detail = flag.detail || (flag as any).description || 'No additional details provided.'
+  const label  = flag.label || 'Vulnerability Alert'
+  const detail = flag.detail || 'No additional details provided.'
 
   return (
     <div
@@ -107,7 +107,7 @@ export function RiskFlags({ flags }: RiskFlagsProps) {
           </div>
         ) : (
           sorted.map((f, i) => {
-            const key = f.id || (f as any).title || (f as any).label || String(i)
+            const key = f.id || f.label || String(i)
             return <FlagItem key={key} flag={f} index={i} />
           })
         )}

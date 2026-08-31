@@ -45,6 +45,7 @@ export interface ScanResult {
     creator: string
     buyTax: string
     sellTax: string
+    isVerified?: boolean
   }
 }
 
