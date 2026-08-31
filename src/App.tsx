@@ -22,7 +22,7 @@ function getChainBadge(chain: string) {
 }
 
 export default function App() {
-  const { scanState, scanToken, reset, progressPercent, isSnapInstalled, connectionStatus, connectionError, installSnap, isStudioMode } = useGenLayer()
+  const { scanState, scanToken, reset, progressPercent, connectionError, isStudioMode } = useGenLayer()
   const { wallet, connect, disconnect } = useWallet()
   const [recentScans, setRecentScans] = useState<ScanResult[]>([])
   const [viewingScan, setViewingScan] = useState<ScanResult | null>(null)
@@ -43,8 +43,10 @@ export default function App() {
   }, [scanState.result])
 
   function handleScan(addr: string, chain: string) {
-    if (!wallet.address) { connect(); return }
-    if (!isSnapInstalled) { installSnap(); return }
+    if (!wallet.address) {
+      connect()
+      return
+    }
     scanToken(addr, chain, wallet.address)
   }
 
@@ -68,13 +70,13 @@ export default function App() {
               <h1 className="font-display font-black text-xs tracking-widest text-white flex items-center gap-2">
                 SCAM<span className="text-cyan-400">SHIELD</span>
                 <span className="text-[8px] font-mono font-bold px-1 rounded bg-cyan-400 text-black">AI</span>
-                {isSnapInstalled && connectionStatus==='connected' ? (
+                {wallet.address ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-mono text-emerald-400 font-bold uppercase tracking-wider">
                     <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />LIVE
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-[8px] font-mono text-rose-400 font-bold uppercase tracking-wider">
-                    <span className="w-1 h-1 rounded-full bg-rose-400" />DEMO
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-[8px] font-mono text-cyan-400 font-bold uppercase tracking-wider">
+                    <span className="w-1 h-1 rounded-full bg-cyan-400" />READY
                   </span>
                 )}
               </h1>
@@ -120,35 +122,41 @@ export default function App() {
                     <div className="text-[9px] text-slate-600 font-mono italic p-2 border border-dashed border-slate-900/60 rounded">No threat logs yet.</div>
                   ) : (
                     <div className="space-y-1.5">
-                      {riskyScans.map((s,i) => (
-                        <div key={i} onClick={() => setViewingScan(s)} className="flex items-center justify-between rounded border border-slate-900 p-2 cursor-pointer hover:bg-red-950/10 hover:border-red-900/30 transition-colors" style={{minWidth:0}}>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-white font-bold text-[10px] truncate">{fmt(s.tokenAddress)}</div>
-                            <div className="text-[8px] font-mono text-slate-500">{s.chainId.toUpperCase()}</div>
+                      {riskyScans.map(s => (
+                        <div key={s.txHash} onClick={() => setViewingScan(s)} className="cyber-card p-2 cursor-pointer hover:border-rose-500/50 transition-all text-[9px] font-mono border-rose-500/20 bg-rose-950/10">
+                          <div className="flex items-center justify-between text-slate-400 mb-1">
+                            <span className="font-bold text-white truncate max-w-[90px]">{s.realTokenData?.symbol ?? fmt(s.tokenAddress)}</span>
+                            <span className={`px-1 rounded text-[7px] font-bold ${getChainBadge(s.chainId)}`}>{s.chainId.toUpperCase()}</span>
                           </div>
-                          <div className="text-red-500 font-black font-mono text-xs pl-2 flex-shrink-0">{s.riskScore}</div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-rose-400 font-bold">{s.verdict}</span>
+                            <span className="text-rose-400/70">{s.riskScore}/100</span>
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {/* Verified Safe */}
+                {/* Safe Verified Logs */}
                 <div>
                   <h3 className="font-display font-bold text-[9px] uppercase tracking-wider flex items-center gap-1.5 mb-2 text-cyan-400">
-                    <Shield className="w-3 h-3" /> Verified Safe ({safeScans.length})
+                    <Shield className="w-3 h-3" /> Verified Logs ({safeScans.length})
                   </h3>
                   {safeScans.length === 0 ? (
-                    <div className="text-[9px] text-slate-600 font-mono italic p-2 border border-dashed border-slate-900/60 rounded">No safe logs yet.</div>
+                    <div className="text-[9px] text-slate-600 font-mono italic p-2 border border-dashed border-slate-900/60 rounded">No verified logs yet.</div>
                   ) : (
                     <div className="space-y-1.5">
-                      {safeScans.map((s,i) => (
-                        <div key={i} onClick={() => setViewingScan(s)} className="flex items-center justify-between rounded border border-slate-900 p-2 cursor-pointer hover:bg-cyan-950/10 hover:border-cyan-900/30 transition-colors" style={{minWidth:0}}>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-white font-bold text-[10px] truncate">{fmt(s.tokenAddress)}</div>
-                            <div className="text-[8px] font-mono text-slate-500">{s.chainId.toUpperCase()}</div>
+                      {safeScans.map(s => (
+                        <div key={s.txHash} onClick={() => setViewingScan(s)} className="cyber-card p-2 cursor-pointer hover:border-cyan-500/50 transition-all text-[9px] font-mono border-cyan-500/20 bg-cyan-950/10">
+                          <div className="flex items-center justify-between text-slate-400 mb-1">
+                            <span className="font-bold text-white truncate max-w-[90px]">{s.realTokenData?.symbol ?? fmt(s.tokenAddress)}</span>
+                            <span className={`px-1 rounded text-[7px] font-bold ${getChainBadge(s.chainId)}`}>{s.chainId.toUpperCase()}</span>
                           </div>
-                          <div className="text-cyan-400 font-black font-mono text-xs pl-2 flex-shrink-0">{s.riskScore}</div>
+                          <div className="flex items-center justify-between">
+                            <span className={s.verdict==='SAFE' ? "text-cyan-400 font-bold" : "text-amber-400 font-bold"}>{s.verdict}</span>
+                            <span className={s.verdict==='SAFE' ? "text-cyan-400/70" : "text-amber-400/70"}>{s.riskScore}/100</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -188,20 +196,6 @@ export default function App() {
 
             {/* PANEL CENTER */}
             <div className="panel-center">
-
-              {/* Snap banner */}
-              {isSnapInstalled === false && (
-                <div className="cyber-card p-3 border-rose-500/30 bg-rose-950/10 text-rose-400 flex items-center justify-between gap-3 animate-in">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <ShieldAlert className="w-4 h-4 flex-shrink-0 animate-pulse" />
-                    <div className="min-w-0">
-                      <div className="font-display font-bold text-[9px] uppercase tracking-wider">GenLayer MetaMask Snap Required</div>
-                      <div className="font-mono text-[9px] text-slate-400 mt-0.5 truncate">Install the GenLayer Snap to enable live scanning.</div>
-                    </div>
-                  </div>
-                  <button onClick={installSnap} className="btn-cyber px-4 py-1.5 text-[9px] font-bold flex-shrink-0" style={{border:'1px solid var(--accent-red)',color:'var(--accent-red)',background:'transparent'}}>Install Snap</button>
-                </div>
-              )}
 
               {/* Wallet banner */}
               {!wallet.address && (

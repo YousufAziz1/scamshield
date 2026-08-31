@@ -1,0 +1,281 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
+import { useGenLayer } from '@/hooks/useGenLayer'
+import { TransactionStatus } from 'genlayer-js/types'
+
+// Mock genlayer-js
+const mockWriteContract = vi.fn()
+const mockReadContract = vi.fn()
+const mockGetTransaction = vi.fn()
+const mockConnect = vi.fn()
+
+vi.mock('genlayer-js', () => ({
+  createClient: vi.fn(() => ({
+    connect: mockConnect,
+    writeContract: mockWriteContract,
+    readContract: mockReadContract,
+    getTransaction: mockGetTransaction,
+  })),
+}))
+
+// Mock fetch for tokenData
+const mockFetch = vi.fn()
+globalThis.fetch = mockFetch
+
+describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
+  const dummyWallet = '0x1111111111111111111111111111111111111111'
+  const targetToken = '0x5510cd555b0ae386b420421a7ad98c6785499983'
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+
+    // Default mock fetch response (Rally NFT metadata)
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('dexscreener.com')) {
+        return { ok: true, json: async () => ({ pairs: null }) }
+      }
+      if (url.includes('token_security')) {
+        return { ok: true, json: async () => ({ code: 1, result: {} }) }
+      }
+      if (url.includes('nft_security')) {
+        return {
+          ok: true,
+          json: async () => ({
+            code: 2,
+            result: {
+              nft_address: targetToken,
+              nft_name: 'Wingston by Rally',
+              nft_symbol: 'WNGST',
+              nft_verified: 1,
+            },
+          }),
+        }
+      }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // ── 1. WALLET + NO SNAP -> REAL SCAN STARTS NATIVELY ─────────────────────
+  it('MetaMask present with NO Snap -> starts REAL scan without blocking or simulating', async () => {
+    // Mock window.ethereum without snap support
+    window.ethereum = {
+      request: vi.fn(async ({ method }: { method: string }) => {
+        if (method === 'wallet_getSnaps') return {} // empty snaps
+        return null
+      }),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xreal_tx_hash_12345')
+    mockGetTransaction.mockResolvedValue({ status: TransactionStatus.PROPOSING })
+
+    const { result } = renderHook(() => useGenLayer())
+
+    // Trigger scanToken
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    expect(result.current.isSimulated).toBe(false)
+    expect(mockWriteContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'scan_token',
+        args: [targetToken, 'ethereum'],
+      })
+    )
+    expect(result.current.scanState.txHash).toBe('0xreal_tx_hash_12345')
+    expect(result.current.scanState.status).toBe('pending')
+  })
+
+  // ── 2. WALLET + SNAP PRESENT -> REAL SCAN STARTS NATIVELY ─────────────────
+  it('MetaMask present WITH Snap -> starts REAL scan identically', async () => {
+    window.ethereum = {
+      request: vi.fn(async ({ method }: { method: string }) => {
+        if (method === 'wallet_getSnaps') return { 'npm:genlayer-snap': {} }
+        return null
+      }),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xsnap_tx_hash_67890')
+    mockGetTransaction.mockResolvedValue({ status: TransactionStatus.PROPOSING })
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    expect(result.current.isSimulated).toBe(false)
+    expect(mockWriteContract).toHaveBeenCalled()
+    expect(result.current.scanState.txHash).toBe('0xsnap_tx_hash_67890')
+  })
+
+  // ── 3. NO WALLET PRESENT -> PROPER ERROR REPORTED ─────────────────────────
+  it('No wallet provider present -> displays clear connection error', async () => {
+    Object.defineProperty(window, 'ethereum', { value: undefined, configurable: true, writable: true })
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    expect(result.current.scanState.status).toBe('error')
+    expect(result.current.scanState.error).toContain('wallet is required')
+  })
+
+  // ── 4. USER REJECTED SIGNATURE -> CLEAN VISIBLE ERROR ────────────────────
+  it('Wallet signature rejection (code 4001) -> exposes clear rejection error', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockRejectedValue(new Error('User rejected the request (code 4001)'))
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    expect(result.current.scanState.status).toBe('error')
+    expect(result.current.scanState.error).toBe('Transaction signature was rejected in your wallet.')
+  })
+
+  // ── 5. ACCEPTED VS FINALIZED: ACCEPTED DOES NOT READ STORAGE PREMATURELY ──
+  it('ACCEPTED state updates UI to accepted and CONTINUES polling without premature storage read', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_accepted')
+    mockGetTransaction.mockResolvedValue({ status: TransactionStatus.ACCEPTED })
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    // Advance timer by 3 seconds for one poll cycle
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    // State should be 'accepted' and NOT 'finalized'
+    expect(result.current.scanState.status).toBe('accepted')
+    // readContract must NOT be called when only ACCEPTED
+    expect(mockReadContract).not.toHaveBeenCalled()
+  })
+
+  // ── 6. FINALIZED + SUCCESSFUL EXECUTION -> READS REAL CONTRACT STORAGE ────
+  it('FINALIZED state with successful execution -> reads actual contract storage and finalizes result', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_finalized')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'SUCCESS',
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        verdict: 'SAFE',
+        riskScore: 12,
+        summary: 'Authoritative analysis verified via validator consensus.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    // Advance timer by 3 seconds for polling
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(result.current.scanState.status).toBe('finalized')
+    expect(mockReadContract).toHaveBeenCalledWith({
+      address: expect.any(String),
+      functionName: 'get_scan_result',
+      args: [targetToken],
+    })
+    expect(result.current.scanState.result?.verdict).toBe('SAFE')
+    expect(result.current.scanState.result?.riskScore).toBe(12)
+    // Preserves real NFT metadata
+    expect(result.current.scanState.result?.realTokenData?.name).toBe('Wingston by Rally')
+    expect(result.current.scanState.result?.realTokenData?.symbol).toBe('WNGST')
+    expect(result.current.scanState.result?.realTokenData?.name).not.toContain('Solayer')
+    expect(result.current.scanState.result?.realTokenData?.symbol).not.toBe('LAYER')
+  })
+
+  // ── 7. FINALIZED + FAILED EXECUTION -> THROWS EXECUTION ERROR ────────────
+  it('FINALIZED state with failed execution -> reports consensus execution failure error', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_failed')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'FAILURE',
+      result: 1,
+    })
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(result.current.scanState.status).toBe('error')
+    expect(result.current.scanState.error).toContain('Transaction execution failed during consensus')
+  })
+
+  // ── 8. DELAYED POLLING -> PRESERVES REAL TX HASH AND DOES NOT FAKE FAIL ─
+  it('Delayed polling exceeding limit -> preserves real txHash and avoids fake failed state', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xlong_running_tx')
+    mockGetTransaction.mockResolvedValue({ status: TransactionStatus.COMMITTING })
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    // Advance timer past 5 minutes (305,000 ms)
+    await act(async () => {
+      vi.advanceTimersByTime(305_000)
+    })
+
+    // Status is preserved as accepted/still processing, preserving txHash
+    expect(result.current.scanState.txHash).toBe('0xlong_running_tx')
+    expect(result.current.scanState.error).toContain('Transaction is still processing')
+  })
+})
