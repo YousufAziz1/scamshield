@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { createClient } from 'genlayer-js'
-import { testnetBradbury, studionet } from 'genlayer-js/chains'
+import { studionet } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 import { CONTRACT } from '@/lib/genlayer'
 import type { ScanState, ScanResult, Verdict, ValidatorVote, RiskFlag } from '@/types'
@@ -237,8 +237,8 @@ export function useGenLayer() {
         throw new Error('MetaMask or an EIP-1193 compatible Web3 wallet is required for live scanning.')
       }
 
-      const activeChain = isStudioMode ? studionet : testnetBradbury
-      const activeChainName = isStudioMode ? 'studionet' : 'testnetBradbury'
+      const activeChain = studionet
+      const activeChainName = 'studionet'
 
       // Initialize read client for RPC polling and contract reads
       const readClient = createClient({ chain: activeChain })
@@ -378,7 +378,7 @@ export function useGenLayer() {
         error: err instanceof Error ? err.message : 'Failed to start live GenLayer scan.'
       })
     }
-  }, [isStudioMode, isSimulated])
+  }, [isSimulated])
 
   return {
     scanState, scanToken, reset,

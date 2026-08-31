@@ -278,4 +278,25 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     expect(result.current.scanState.txHash).toBe('0xlong_running_tx')
     expect(result.current.scanState.error).toContain('Transaction is still processing')
   })
+
+  // ── 9. CONSENSUS REVERT ERROR -> CLEAR FAILED STATE EXPOSED ───────────────
+  it('EVM or consensus contract revert -> exposes clear real failure message without fake fallbacks', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockRejectedValue(new Error('Transaction reverted: EVM tx 0x39ea461e to consensus contract 0x0112Bf6e was reverted.'))
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    expect(result.current.scanState.status).toBe('error')
+    expect(result.current.scanState.error).toContain('Transaction reverted')
+    expect(result.current.isSimulated).toBe(false)
+  })
 })
+

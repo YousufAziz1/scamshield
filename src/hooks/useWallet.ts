@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { testnetBradbury } from 'genlayer-js/chains'
+import { studionet } from 'genlayer-js/chains'
 
 export interface WalletState {
   address: string | null
@@ -74,8 +74,8 @@ export function useWallet() {
         error: null,
       })
 
-      // Switch chain to Bradbury testnet if needed
-      const chainIdHex = `0x${testnetBradbury.id.toString(16)}`
+      // Switch chain to GenLayer Studio network
+      const chainIdHex = `0x${studionet.id.toString(16)}`
       try {
         await eth.request({
           method: 'wallet_switchEthereumChain',
@@ -83,7 +83,7 @@ export function useWallet() {
         })
       } catch (switchError: unknown) {
         const rpcErr = switchError as RpcError
-        // If chain 4902 is missing, add GenLayer testnet
+        // If chain 4902 is missing, add GenLayer Studio network
         if (rpcErr.code === 4902) {
           try {
             await eth.request({
@@ -91,15 +91,15 @@ export function useWallet() {
               params: [
                 {
                   chainId: chainIdHex,
-                  chainName: testnetBradbury.name,
-                  nativeCurrency: testnetBradbury.nativeCurrency,
-                  rpcUrls: testnetBradbury.rpcUrls.default.http,
-                  blockExplorerUrls: testnetBradbury.blockExplorers?.default.url ? [testnetBradbury.blockExplorers.default.url] : [],
+                  chainName: studionet.name,
+                  nativeCurrency: studionet.nativeCurrency,
+                  rpcUrls: studionet.rpcUrls.default.http,
+                  blockExplorerUrls: studionet.blockExplorers?.default.url ? [studionet.blockExplorers.default.url] : [],
                 },
               ],
             })
           } catch (addError) {
-            console.warn('Failed to add GenLayer network to wallet:', addError)
+            console.warn('Failed to add GenLayer Studio network to wallet:', addError)
           }
         }
       }
