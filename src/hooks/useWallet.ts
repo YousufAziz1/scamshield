@@ -20,43 +20,54 @@ interface EthereumWindow {
 }
 
 export function useWallet() {
-  const [wallet, setWallet] = useState<WalletState>(
-    () => {
-      const saved = localStorage.getItem('scamshield_wallet')
-      const fallback = (typeof window === 'undefined' || !(window as unknown as EthereumWindow).ethereum) 
-        ? '0x71C7656EC7ab88b098defB751B7401B5f6d8976F' 
-        : null
-      return {
-        address: saved || fallback || null,
-        isConnecting: false,
-        error: null,
-      }
-    }
-  )
+  const [wallet, setWallet] = useState<WalletState>({
+    address: null,
+    isConnecting: false,
+    error: null,
+  })
 
-  const connect = useCallback(async () => {
+  // Synchronize with active MetaMask accounts on mount
+  useEffect(() => {
     const eth = (window as unknown as EthereumWindow).ethereum
-    if (typeof window === 'undefined' || !eth) {
-      const mockAddress = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F'
-      localStorage.setItem('scamshield_wallet', mockAddress)
-      setWallet({
-        address: mockAddress,
-        isConnecting: false,
-        error: null,
+    if (!eth) return
+
+    eth.request({ method: 'eth_accounts' })
+      .then(accounts => {
+        const accs = accounts as string[]
+        if (accs && accs.length > 0) {
+          setWallet({
+            address: accs[0],
+            isConnecting: false,
+            error: null,
+          })
+        }
       })
-      return
+      .catch(err => {
+        console.warn('Initial eth_accounts check failed:', err)
+      })
+  }, [])
+
+  const connect = useCallback(async (): Promise<string | null> => {
+    const eth = (window as unknown as EthereumWindow).ethereum
+    if (!eth) {
+      const errMsg = 'MetaMask or an EIP-1193 compatible Web3 wallet was not detected. Please install a Web3 browser wallet extension.'
+      setWallet({
+        address: null,
+        isConnecting: false,
+        error: errMsg,
+      })
+      return null
     }
 
     setWallet(prev => ({ ...prev, isConnecting: true, error: null }))
     try {
-      // Request account access
+      // Request user account authorization
       const accounts = (await eth.request({ method: 'eth_requestAccounts' })) as string[]
       if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts returned')
+        throw new Error('No accounts authorized in wallet.')
       }
-      
+
       const address = accounts[0]
-      localStorage.setItem('scamshield_wallet', address)
       setWallet({
         address,
         isConnecting: false,
@@ -72,7 +83,7 @@ export function useWallet() {
         })
       } catch (switchError: unknown) {
         const rpcErr = switchError as RpcError
-        // If the chain hasn't been added, add it
+        // If chain 4902 is missing, add GenLayer testnet
         if (rpcErr.code === 4902) {
           try {
             await eth.request({
@@ -88,23 +99,29 @@ export function useWallet() {
               ],
             })
           } catch (addError) {
-            console.error('Failed to add network', addError)
+            console.warn('Failed to add GenLayer network to wallet:', addError)
           }
-        } else {
-          console.error('Failed to switch network', switchError)
         }
       }
+
+      return address
     } catch (err: unknown) {
-      setWallet(prev => ({
-        ...prev,
+      const msg = err instanceof Error ? err.message : String(err)
+      const userRejected = msg.includes('4001') || msg.toLowerCase().includes('user rejected') || msg.toLowerCase().includes('denied')
+      const displayError = userRejected
+        ? 'Wallet connection request was rejected in your wallet.'
+        : `Wallet connection failed: ${msg}`
+
+      setWallet({
+        address: null,
         isConnecting: false,
-        error: err instanceof Error ? err.message : 'Connection failed',
-      }))
+        error: displayError,
+      })
+      return null
     }
   }, [])
 
   const disconnect = useCallback(() => {
-    localStorage.removeItem('scamshield_wallet')
     setWallet({
       address: null,
       isConnecting: false,
@@ -112,17 +129,16 @@ export function useWallet() {
     })
   }, [])
 
-  // Listen for account changes
+  // Listen for account and chain change events from provider
   useEffect(() => {
     const eth = (window as unknown as EthereumWindow).ethereum
-    if (typeof window === 'undefined' || !eth) return
+    if (!eth) return
 
     const handleAccountsChanged = (accounts: unknown) => {
       const accs = accounts as string[]
       if (!accs || accs.length === 0) {
         disconnect()
       } else {
-        localStorage.setItem('scamshield_wallet', accs[0])
         setWallet({
           address: accs[0],
           isConnecting: false,
@@ -132,6 +148,7 @@ export function useWallet() {
     }
 
     const handleChainChanged = () => {
+      // Reload on network switch to re-initialize contracts cleanly
       window.location.reload()
     }
 

@@ -42,18 +42,29 @@ export default function App() {
     }
   }, [scanState.result])
 
-  function handleScan(addr: string, chain: string) {
-    if (!wallet.address) {
-      connect()
-      return
+  async function handleScan(addr: string, chain: string) {
+    let activeAddr = wallet.address
+    if (!activeAddr) {
+      activeAddr = await connect()
+      if (!activeAddr) return
     }
-    scanToken(addr, chain, wallet.address)
+    await scanToken(addr, chain, activeAddr)
   }
 
   const riskyScans = recentScans.filter(s => s.verdict==='SCAM'||s.verdict==='RISKY').slice(0,5)
   const safeScans  = recentScans.filter(s => s.verdict==='SAFE'||s.verdict==='UNKNOWN').slice(0,5)
 
   const accentVar = isMalicious ? 'var(--accent-red)' : 'var(--accent-cyan)'
+
+  const currentUiState = !wallet.address
+    ? 'CONNECT WALLET'
+    : scanState.status === 'error'
+    ? 'ERROR'
+    : scanState.status === 'finalized'
+    ? 'VERIFIED'
+    : busy
+    ? scanState.status.toUpperCase()
+    : 'READY'
 
   return (
     <div className="app-shell">
@@ -70,15 +81,22 @@ export default function App() {
               <h1 className="font-display font-black text-xs tracking-widest text-white flex items-center gap-2">
                 SCAM<span className="text-cyan-400">SHIELD</span>
                 <span className="text-[8px] font-mono font-bold px-1 rounded bg-cyan-400 text-black">AI</span>
-                {wallet.address ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-mono text-emerald-400 font-bold uppercase tracking-wider">
-                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />LIVE
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-[8px] font-mono text-cyan-400 font-bold uppercase tracking-wider">
-                    <span className="w-1 h-1 rounded-full bg-cyan-400" />READY
-                  </span>
-                )}
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider ${
+                  currentUiState === 'VERIFIED' || currentUiState === 'READY'
+                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                    : currentUiState === 'ERROR'
+                    ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+                    : 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400'
+                }`}>
+                  <span className={`w-1 h-1 rounded-full ${
+                    currentUiState === 'VERIFIED' || currentUiState === 'READY'
+                      ? 'bg-emerald-400 animate-pulse'
+                      : currentUiState === 'ERROR'
+                      ? 'bg-rose-400'
+                      : 'bg-cyan-400 animate-pulse'
+                  }`} />
+                  {currentUiState}
+                </span>
               </h1>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
@@ -209,13 +227,13 @@ export default function App() {
               )}
 
               {/* Error banner */}
-              {scanState.status==='error' && (
+              {(scanState.status === 'error' || wallet.error) && (
                 <div className="cyber-card p-3 border-red-500/30 bg-red-500/5 text-red-400 flex items-center justify-between animate-in">
                   <div className="flex items-center gap-2 min-w-0">
                     <X className="w-4 h-4 flex-shrink-0" />
-                    <span className="font-mono text-[9px] truncate">{scanState.error}</span>
+                    <span className="font-mono text-[9px] truncate">{scanState.error || wallet.error}</span>
                   </div>
-                  <button onClick={reset} className="btn-cyber border border-red-500 text-red-400 px-4 py-1.5 text-[9px] flex-shrink-0">Dismiss</button>
+                  <button onClick={() => { reset(); disconnect() }} className="btn-cyber border border-red-500 text-red-400 px-4 py-1.5 text-[9px] flex-shrink-0">Dismiss</button>
                 </div>
               )}
 
