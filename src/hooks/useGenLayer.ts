@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { createClient } from 'genlayer-js'
 import { studionet } from 'genlayer-js/chains'
-import { TransactionStatus } from 'genlayer-js/types'
 import { CONTRACT } from '@/lib/genlayer'
 import type { ScanState, ScanResult, Verdict, ValidatorVote, RiskFlag } from '@/types'
 import { fetchTokenRealData, type RealTokenData } from '@/lib/tokenData'
@@ -304,19 +303,23 @@ export function useGenLayer() {
           const tx = await readClient.getTransaction({ hash: txHash as unknown as Parameters<typeof readClient.getTransaction>[0]['hash'] })
           if (!tx) return
 
-          const s = tx.status
-          const statusStr = typeof s === 'string' ? s.toUpperCase() : ''
+          const statusName = (
+            (tx as { statusName?: string }).statusName ||
+            (typeof tx.status === 'string' ? tx.status : '')
+          ).toUpperCase()
 
-          if (s === TransactionStatus.PROPOSING || statusStr === 'PROPOSING') {
+          const statusNum = typeof tx.status === 'number' ? tx.status : -1
+
+          if (statusName === 'PROPOSING' || statusNum === 2 || statusNum === 3) {
             setScanState(prev => ({ ...prev, status: 'proposing' }))
-          } else if (s === TransactionStatus.COMMITTING || statusStr === 'COMMITTING') {
+          } else if (statusName === 'COMMITTING' || statusNum === 4) {
             setScanState(prev => ({ ...prev, status: 'committing' }))
-          } else if (s === TransactionStatus.REVEALING || statusStr === 'REVEALING') {
+          } else if (statusName === 'REVEALING' || statusNum === 5) {
             setScanState(prev => ({ ...prev, status: 'revealing' }))
-          } else if (s === TransactionStatus.ACCEPTED || statusStr === 'ACCEPTED') {
+          } else if (statusName === 'ACCEPTED' || statusName === 'READY_TO_FINALIZE' || statusNum === 6) {
             // Distinct ACCEPTED state: update UI and keep polling until FINALIZED
             setScanState(prev => ({ ...prev, status: 'accepted' }))
-          } else if (s === TransactionStatus.FINALIZED || statusStr === 'FINALIZED') {
+          } else if (statusName === 'FINALIZED' || statusNum === 7) {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current)
               pollIntervalRef.current = null
@@ -348,7 +351,7 @@ export function useGenLayer() {
 
             const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData)
             setScanState({ status: 'finalized', txHash, result: scanResult })
-          } else if (s === TransactionStatus.CANCELED || statusStr === 'CANCELED') {
+          } else if (statusName === 'CANCELED' || statusNum === 8) {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current)
               pollIntervalRef.current = null
