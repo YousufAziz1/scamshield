@@ -239,12 +239,13 @@ export function useGenLayer() {
               detail: f.description
             }))
           } else {
-            // Match quick scan demo targets
-            if (addrLower.includes('a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') || addrLower.includes('2260fac5e5542a773aa44fbcfedf7c193bc2c599') || addrLower.includes('1f9840a85d5af5bf1d1762f925bdaddc4201f984')) {
+            const cleanChainLower = chainId.toLowerCase().trim()
+            // Match quick scan demo targets strictly by chain AND exact address
+            if (cleanChainLower === 'ethereum' && (addrLower === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' || addrLower === '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599' || addrLower === '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984')) {
               score = 5
               verdictStr = 'SAFE'
               summaryStr = `Consensus validation successful for verified reference token (${tokenAddress.slice(0, 8)}). Contract conforms to standard specifications with verified source code.`
-            } else if (addrLower.includes('4f128e6dbd1283c799a4e21a2c91a329d48b1111') || addrLower.includes('8076c74c5e3f5852037f31ff0093eeb8c8add8d3') || addrLower.includes('58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8')) {
+            } else if (cleanChainLower === 'bsc' && (addrLower === '0x4f128e6dbd1283c799a4e21a2c91a329d48b1111' || addrLower === '0x8076c74c5e3f5852037f31ff0093eeb8c8add8d3' || addrLower === '0x58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8')) {
               score = 92
               verdictStr = 'SCAM'
               summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk honeypot bytecode. Direct analysis identifies non-standard transfer taxes (up to 100%), blocked liquidity transfers, and unrenounced owner control permissions.`
@@ -254,7 +255,7 @@ export function useGenLayer() {
                 { id: 'unrenounced_owner', severity: 'medium', label: 'Unrenounced Ownership', detail: 'Ownership is held by an active EOA address with permissions to modify critical parameters.' }
               ]
             } else {
-              // Unverified / Unknown contract: strictly return UNKNOWN
+              // Unverified / Unknown contract on this chain: strictly return UNKNOWN with score 50 and INSUFFICIENT DATA
               score = 50
               verdictStr = 'UNKNOWN'
               summaryStr = 'Unable to verify token identity or security parameters. No authoritative market or contract metadata found on the selected network.'

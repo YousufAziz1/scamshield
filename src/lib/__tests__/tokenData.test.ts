@@ -53,9 +53,11 @@ describe('Token & NFT Identity Resolution Tests', () => {
     expect(data?.symbol).toBe('WNGST')
     expect(data?.isVerified).toBe(true)
 
-    // MUST NOT substitute Solayer / LAYER
+    // MUST NEVER resolve to Solayer or LAYER
     expect(data?.name).not.toContain('Solayer')
+    expect(data?.name).not.toContain('LAYER')
     expect(data?.symbol).not.toBe('LAYER')
+    expect(data?.symbol).not.toBe('SOLAYER')
   })
 
   // ── 2. IDENTITY MISMATCH & WRONG-CHAIN PREVENTION ────────────────────────

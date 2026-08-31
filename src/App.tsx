@@ -255,21 +255,17 @@ export default function App() {
               {/* Contract Specs Grid */}
               {currentResult && !busy && (() => {
                 const r = currentResult
-                const isMal = r.verdict==='SCAM'||r.verdict==='RISKY'
-                const isUnk = r.verdict==='UNKNOWN'
                 
-                // Get real-time values or fallbacks
-                const buyTaxVal = r.realTokenData ? r.realTokenData.buyTax : (isMal ? '15' : isUnk ? '0' : '0')
-                const sellTaxVal = r.realTokenData ? r.realTokenData.sellTax : (isMal ? '25' : isUnk ? '0' : '0')
-                const taxLabel = isUnk && !r.realTokenData?.isVerified ? 'N/A' : `Buy ${buyTaxVal}% / Sell ${sellTaxVal}%`
+                // Get authoritative values or N/A (never fabricate fallback metrics)
+                const taxLabel = r.realTokenData && r.realTokenData.isVerified ? `Buy ${r.realTokenData.buyTax}% / Sell ${r.realTokenData.sellTax}%` : 'N/A'
 
-                const supply  = r.realTokenData?.totalSupply || (isUnk ? 'N/A' : isMal ? '1,000,000,000' : '4,000,000,000')
+                const supply  = (r.realTokenData?.totalSupply && r.realTokenData.totalSupply !== 'N/A') ? r.realTokenData.totalSupply : 'N/A'
                 
-                const liq     = r.realTokenData?.liquidity !== undefined && r.realTokenData.liquidity !== null 
+                const liq     = (r.realTokenData?.liquidity !== undefined && r.realTokenData.liquidity !== null) 
                                 ? `$${r.realTokenData.liquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
-                                : (isUnk ? 'N/A' : isMal ? '$12,400' : '$2.4B')
+                                : 'N/A'
                 
-                const creator = r.realTokenData?.creator 
+                const creator = r.realTokenData?.creator && r.realTokenData.creator !== 'Unknown Deployer'
                                 ? (r.realTokenData.creator.startsWith('0x') ? fmt(r.realTokenData.creator) : r.realTokenData.creator) 
                                 : fmt(r.tokenAddress)
 
@@ -462,16 +458,19 @@ export default function App() {
 
                 {currentResult && !busy && (() => {
                   const score = Math.round(currentResult.riskScore)
-                  const scoreColor = score > 70 ? 'var(--accent-red)' : score >= 40 ? 'var(--accent-yellow)' : 'var(--accent-cyan)'
+                  const isUnk = currentResult.verdict === 'UNKNOWN'
+                  const scoreColor = isUnk ? 'var(--accent-yellow)' : score > 70 ? 'var(--accent-red)' : score >= 40 ? 'var(--accent-yellow)' : 'var(--accent-cyan)'
                   return (
                     <>
                       <p className="text-[10px] leading-relaxed text-slate-400 font-mono mt-2">
                         The decentralized AI oracle network has independently analyzed the AST bytecode, liquidity metrics, and deployer history.
                         Consensus has been reached via Byzantine fault-tolerant aggregation.
-                        {isMalicious ? ' High probability of rug-pull or honeypot mechanics detected.' : ' Contract parameters conform to safe standards.'}
+                        {isUnk ? ' Authoritative identity or market data was insufficient on the selected chain to determine a conclusive security rating.' : isMalicious ? ' High probability of rug-pull or honeypot mechanics detected.' : ' Contract parameters conform to safe standards.'}
                       </p>
                       <div className="mt-auto pt-3 border-t border-slate-900/60">
-                        <div style={{color:'#5c7a7a',fontSize:9,fontFamily:'JetBrains Mono,monospace',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>Consensus Score</div>
+                        <div style={{color:'#5c7a7a',fontSize:9,fontFamily:'JetBrains Mono,monospace',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>
+                          {isUnk ? 'INSUFFICIENT DATA RATING' : 'Consensus Score'}
+                        </div>
                         <div style={{display:'flex',alignItems:'baseline',gap:4,marginBottom:8}}>
                           <span style={{fontSize:32,fontWeight:900,fontFamily:'Orbitron,sans-serif',color:scoreColor,lineHeight:1,textShadow:`0 0 20px ${scoreColor}60`}}>{score}</span>
                           <span style={{fontSize:16,color:'#3d6060',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>/100</span>
