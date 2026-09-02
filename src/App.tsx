@@ -1,33 +1,55 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Shield, AlertCircle, Cpu, Activity, Database, CheckCircle2 } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { useGenLayer } from '@/hooks/useGenLayer'
 import { CONTRACT } from '@/lib/genlayer'
 import { useWallet } from '@/hooks/useWallet'
-import { TokenInput } from '@/components/TokenInput'
 import { VerdictCard } from '@/components/VerdictCard'
 import { RiskFlags } from '@/components/RiskFlags'
-import { WalletConnect } from '@/components/WalletConnect'
 import type { ScanResult } from '@/types'
 
-const fmt = (addr: string) => !addr ? '' : addr.length <= 13 ? addr : `${addr.slice(0, 6)}...${addr.slice(-4)}`
+const fmt = (addr: string) => (!addr ? '' : addr.length <= 13 ? addr : `${addr.slice(0, 6)}...${addr.slice(-4)}`)
 
-const CONSENSUS_PIPELINE = [
-  { stage: '01', name: 'Mempool & Ingestion', desc: 'Non-deterministic web intake', key: 'pending' },
-  { stage: '02', name: 'Leader Proposal',     desc: 'Deterministic AST bytecode execution', key: 'proposing' },
-  { stage: '03', name: 'Commit Phase',        desc: 'Cryptographic hash commitment', key: 'committing' },
-  { stage: '04', name: 'Vote Revelation',     desc: 'Byzantine majority agreement', key: 'revealing' },
-  { stage: '05', name: 'Finalization',        desc: 'Contract state commit & verification', key: 'accepted' },
+const CHAINS = [
+  { id: 'ethereum', label: 'ETH', icon: 'currency_exchange' },
+  { id: 'solana',   label: 'SOL', icon: 'bolt' },
+  { id: 'polygon',  label: 'POLY', icon: 'category' },
+  { id: 'bsc',      label: 'BSC', icon: 'token' },
+  { id: 'arbitrum', label: 'ARB', icon: 'hub' },
+  { id: 'base',     label: 'BASE', icon: 'layers' },
+]
+
+const QUICK_TARGETS = [
+  { name: 'USDC',      addr: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', chainId: 'ethereum', chain: 'ETH', safe: true },
+  { name: 'Honeypot',  addr: '0x3207eeBbeA76757b447475f4B95B309A7e5a0fE8', chainId: 'bsc',      chain: 'BSC', safe: false },
+  { name: 'Rally NFT', addr: '0x5510cd555b0ae386b420421a7ad98c6785499983', chainId: 'ethereum', chain: 'ETH', safe: true },
+  { name: 'WBTC',      addr: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', chainId: 'ethereum', chain: 'ETH', safe: true },
+  { name: 'UNI',       addr: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', chainId: 'ethereum', chain: 'ETH', safe: true },
+  { name: 'SafeMoon',  addr: '0x8076c74c5e3f5852037f31ff0093eeb8c8add8d3', chainId: 'bsc',      chain: 'BSC', safe: false },
+]
+
+const CONSENSUS_STAGES = [
+  { stage: '01', name: 'Mempool & Ingestion', key: 'pending' },
+  { stage: '02', name: 'Leader Proposal',     key: 'proposing' },
+  { stage: '03', name: 'Commit Phase',        key: 'committing' },
+  { stage: '04', name: 'Vote Revelation',     key: 'revealing' },
+  { stage: '05', name: 'Finalization',        key: 'accepted' },
 ] as const
 
 export default function App() {
   const { scanState, scanToken, reset, connectionError } = useGenLayer()
   const { wallet, connect, disconnect } = useWallet()
 
+  const [tokenAddress, setTokenAddress] = useState('')
+  const [selectedChain, setSelectedChain] = useState('ethereum')
+  const [validationError, setValidationError] = useState('')
   const [recentScans, setRecentScans] = useState<ScanResult[]>([])
   const [viewingScan, setViewingScan] = useState<ScanResult | null>(null)
   const [copiedAddr, setCopiedAddr] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
+
   const lastFinalizedRef = useRef<string | null>(null)
+  const terminalRef = useRef<HTMLDivElement>(null)
 
   // Accumulate scans in session history
   useEffect(() => {
@@ -43,46 +65,73 @@ export default function App() {
   const currentResult = viewingScan ?? scanState.result
   const busy = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'accepted'].includes(scanState.status)
 
-  const riskyScans = recentScans.filter(s => s.verdict === 'SCAM' || s.verdict === 'RISKY')
+  // Auto-scroll terminal to bottom
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+    }
+  }, [scanState.status, busy, currentResult])
 
-  // Trigger real scan with wallet connection
-  async function handleScan(tokenAddress: string, chainId: string) {
+  // Validation
+  function validateAddress(addr: string, chain: string): boolean {
+    const clean = addr.trim()
+    if (!clean) {
+      setValidationError('Please enter a contract address')
+      return false
+    }
+    if (chain === 'solana') {
+      if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(clean)) {
+        setValidationError('Invalid Solana base58 token address')
+        return false
+      }
+    } else {
+      if (!/^0x[0-9a-fA-F]{40}$/.test(clean)) {
+        setValidationError('Invalid EVM address: must be 0x followed by 40 hex characters')
+        return false
+      }
+    }
+    setValidationError('')
+    return true
+  }
+
+  async function handleScanSubmit(e: React.FormEvent) {
+    e.preventDefault()
     if (busy) return
-    setViewingScan(null)
+    const clean = tokenAddress.trim()
+    if (!validateAddress(clean, selectedChain)) return
 
+    setViewingScan(null)
     if (!wallet.address) {
       try {
         await connect()
-      } catch (e) {
-        console.error('Connection request failed:', e)
+      } catch (err) {
+        console.error('Wallet connection failed:', err)
         return
       }
     }
 
     const currentWallet = wallet.address || ((window.ethereum as unknown as { selectedAddress?: string })?.selectedAddress) || ''
-    await scanToken(tokenAddress, chainId, currentWallet)
+    await scanToken(clean, selectedChain, currentWallet)
   }
 
-  // Active status badge
-  const currentUiState = !wallet.address
-    ? 'CONNECT WALLET'
-    : scanState.status === 'idle'
-    ? 'READY'
-    : scanState.status === 'submitting'
-    ? 'SUBMITTING'
-    : scanState.status === 'pending'
-    ? 'PENDING'
-    : scanState.status === 'proposing'
-    ? 'PROPOSING'
-    : scanState.status === 'committing'
-    ? 'COMMITTING'
-    : scanState.status === 'revealing'
-    ? 'REVEALING'
-    : scanState.status === 'accepted'
-    ? 'ACCEPTED'
-    : scanState.status === 'finalized'
-    ? 'VERIFIED'
-    : 'ERROR'
+  async function handlePaste() {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) {
+        setTokenAddress(text.trim())
+        setValidationError('')
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function selectQuickTarget(addr: string, chainId: string) {
+    if (busy) return
+    setTokenAddress(addr)
+    setSelectedChain(chainId)
+    setValidationError('')
+  }
 
   const copyContractAddr = async () => {
     try {
@@ -94,72 +143,105 @@ export default function App() {
     }
   }
 
+  // Calculate Donut progress & theme
+  const activeScore = currentResult ? Math.round(currentResult.riskScore) : 98
+  const isMalicious = currentResult ? currentResult.verdict === 'SCAM' || currentResult.verdict === 'RISKY' : false
+  const isUnknown = currentResult ? currentResult.verdict === 'UNKNOWN' : false
+  const donutOffset = 251.2 - (251.2 * (currentResult ? 100 - activeScore : 98)) / 100
+  const donutColor = isMalicious ? '#FF3E3E' : isUnknown ? '#ffe253' : '#00ffc2'
+  const donutStatusText = isMalicious ? 'SCAM' : isUnknown ? 'WARN' : 'SAFE'
+
   return (
-    <div className="min-h-screen w-full bg-mesh-canvas text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="bg-background font-body-md text-on-background min-h-screen">
       
-      {/* ── TOP LUXURY NAVIGATION BAR ── */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 sm:px-6 lg:px-8 py-3.5 flex justify-center">
-        <div className="w-full max-w-[1720px] flex items-center justify-between gap-4">
-          {/* Brand identity */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-9 h-9 rounded-xl overflow-hidden border border-cyan-500/30 p-0.5 bg-slate-900 shadow-[0_0_16px_rgba(0,242,254,0.25)] flex-shrink-0">
-              <img src="/logo.jpg" alt="ScamShield Logo" className="w-full h-full object-cover rounded-lg" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-display font-black text-sm tracking-wider text-white">
-                  SCAM<span className="text-cyan-400">SHIELD</span>
-                </span>
-                <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
-                  AI
-                </span>
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-slate-300">
-                  <span className={`w-1.5 h-1.5 rounded-full ${busy ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400'}`} />
-                  {currentUiState}
+      {/* ── HEADER ── */}
+      <header className="fixed top-0 w-full z-50 bg-surface-container/40 backdrop-blur-2xl border-b border-primary-container/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <div className="h-16 w-full px-4 sm:px-8 lg:px-10 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary-container/10 border border-primary-container/30 rounded shadow-[0_0_10px_rgba(0,255,194,0.2)] flex items-center justify-center">
+                <span className="material-symbols-outlined text-primary-container text-[20px] drop-shadow-[0_0_5px_rgba(0,255,194,0.5)]">
+                  security
                 </span>
               </div>
-              <p className="text-[10px] font-mono text-slate-500 hidden sm:block">
-                GenLayer Intelligent Contract Security Oracle
-              </p>
+              <span className="font-label-caps text-label-caps text-primary tracking-widest font-bold">
+                VOID_CORE
+              </span>
             </div>
+
+            <nav className="hidden lg:flex items-center gap-6 ml-6 h-16">
+              {[
+                { id: 'overview', label: 'OVERVIEW' },
+                { id: 'threat-map', label: 'THREAT_MAP' },
+                { id: 'nodes', label: 'NODES' },
+                { id: 'vault', label: 'VAULT' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`font-label-caps transition-colors h-full flex items-center px-2 cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'text-primary-container border-b-2 border-primary-container drop-shadow-[0_0_5px_rgba(0,255,194,0.5)] font-bold'
+                      : 'text-on-surface-variant hover:text-primary-container'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
           </div>
 
-          {/* Real Network Telemetry & Wallet Header Controls */}
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:flex items-center gap-4 text-xs font-mono border-r border-slate-800 pr-4">
-              <div>
-                <div className="text-[9px] text-slate-500 uppercase font-bold">Network</div>
-                <div className="text-slate-200 font-semibold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  Studionet (61999)
-                </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-3 px-4 border-r border-border-subtle h-8">
+              <div className="relative flex items-center gap-2">
+                <span className="flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-container opacity-75 shadow-[0_0_10px_rgba(0,255,194,0.8)]" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-container shadow-[0_0_8px_rgba(0,255,194,0.6)]" />
+                </span>
+                <span className="font-label-caps text-[10px] text-primary-container tracking-wider drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
+                  ACTIVE_AGENTS
+                </span>
               </div>
-              <div>
-                <div className="text-[9px] text-slate-500 uppercase font-bold">Consensus</div>
-                <div className="text-slate-200 font-semibold">BFT Multi-Agent</div>
-              </div>
-              <div>
-                <div className="text-[9px] text-slate-500 uppercase font-bold">Session History</div>
-                <div className="text-slate-200 font-semibold">{recentScans.length} Scanned • {riskyScans.length} Flagged</div>
+              <div className="flex items-center gap-2 ml-4">
+                <span className="material-symbols-outlined text-[18px] text-secondary">hub</span>
+                <span className="material-symbols-outlined text-[18px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">lan</span>
               </div>
             </div>
 
-            <WalletConnect wallet={wallet} onConnect={connect} onDisconnect={disconnect} />
+            {/* Connect Wallet button */}
+            <button
+              onClick={() => {
+                if (wallet.address) disconnect()
+                else connect()
+              }}
+              className="flex items-center gap-2 px-4 py-1.5 border border-primary-container/50 bg-primary-container/5 text-primary-container font-label-caps text-label-caps hover:bg-primary-container/20 hover:border-primary-container hover:shadow-[0_0_15px_rgba(0,255,194,0.3)] transition-all rounded-sm cursor-pointer"
+            >
+              {wallet.isConnecting ? 'CONNECTING...' : wallet.address ? fmt(wallet.address) : 'CONNECT_WALLET'}
+            </button>
+
+            {/* Profile avatar */}
+            <div
+              onClick={copyContractAddr}
+              className="w-8 h-8 rounded-full bg-surface-container-highest border border-border-subtle flex items-center justify-center cursor-pointer hover:bg-surface-variant hover:border-primary-container/50 transition-all"
+              title={copiedAddr ? 'COPIED TO CLIPBOARD!' : `Contract: ${CONTRACT}`}
+            >
+              <span className="material-symbols-outlined text-on-surface text-[18px]">person</span>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* ── ERROR NOTIFICATION BANNER ── */}
+      {/* Global Connection Error Notification */}
       <AnimatePresence>
-        {(scanState.error || connectionError) && (
-          <div className="bg-rose-950/80 border-b border-rose-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-rose-300 font-mono">
+        {connectionError && (
+          <div className="fixed top-16 left-0 w-full z-40 bg-alert-critical/90 text-white px-6 py-2.5 text-xs font-mono flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-              <span>{scanState.error || connectionError}</span>
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{connectionError}</span>
             </div>
             <button
               onClick={() => reset()}
-              className="text-[10px] uppercase font-bold text-rose-400 hover:text-rose-200 p-1 cursor-pointer"
+              className="text-[10px] uppercase font-bold text-white hover:underline p-1 cursor-pointer"
             >
               Dismiss
             </button>
@@ -167,410 +249,576 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ── MAIN RESPONSIVE SECURITY CANVAS ── */}
-      <main className="flex-1 w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 dashboard-grid">
-        
-        {/* ── LEFT PANEL: SEARCH CONSOLE & SESSION LOGS ── */}
-        <div className="flex flex-col gap-6 w-full">
-          {/* Main Input Card */}
-          <div className="glass-card shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
-            <TokenInput
-              onScan={handleScan}
-              status={scanState.status}
-              onReset={() => { reset(); setViewingScan(null) }}
-            />
-          </div>
-
-          {/* Session Scan History Card */}
-          <div className="glass-card p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-cyan-400" />
-                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
-                  Session Scans ({recentScans.length})
-                </h3>
-              </div>
-              <span className="text-[9px] font-mono text-slate-500 uppercase">Local Cache</span>
-            </div>
-
-            {recentScans.length === 0 ? (
-              <div className="py-6 text-center text-xs font-mono text-slate-500 border border-dashed border-slate-800/80 rounded-xl bg-slate-950/40">
-                No session scans yet. Run a contract analysis above.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
-                {recentScans.map((s, idx) => {
-                  const bad = s.verdict === 'SCAM' || s.verdict === 'RISKY'
-                  const unk = s.verdict === 'UNKNOWN'
-                  const badgeColor = bad ? 'text-rose-400 bg-rose-950/40 border-rose-500/30' : unk ? 'text-amber-400 bg-amber-950/40 border-amber-500/30' : 'text-emerald-400 bg-emerald-950/40 border-emerald-500/30'
-                  const active = currentResult?.tokenAddress.toLowerCase() === s.tokenAddress.toLowerCase()
-
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setViewingScan(s)}
-                      className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                        active
-                          ? 'bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_16px_rgba(0,242,254,0.1)]'
-                          : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-display font-bold text-xs text-white truncate">
-                            {s.realTokenData?.name || s.tokenIdentity?.name || 'Unknown Asset'}
-                          </span>
-                          <span className="text-[10px] font-mono text-slate-400">
-                            ({s.realTokenData?.symbol || s.tokenIdentity?.symbol || '?'})
-                          </span>
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-500 truncate mt-0.5">
-                          {fmt(s.tokenAddress)} • {s.chainId.toUpperCase()}
-                        </div>
-                      </div>
-                      <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border uppercase flex-shrink-0 ${badgeColor}`}>
-                        {s.verdict}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── CENTER PANEL: SCAN DOSSIER & CONSENSUS RESULTS ── */}
-        <div className="flex flex-col gap-6 w-full">
-          {/* Case 1: Scanning in Progress */}
-          {busy && (
-            <div className="glass-card p-8 text-center flex flex-col items-center justify-center min-h-[380px]">
-              <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
-                <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 animate-ping" />
-                <div className="absolute inset-2 rounded-full border-2 border-dashed border-cyan-400 animate-spin-slow" />
-                <Cpu className="w-10 h-10 text-cyan-400 animate-pulse" />
-              </div>
-
-              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-widest text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 mb-3 animate-pulse">
-                VALIDATORS EXECUTING CONSENSUS
-              </span>
-
-              <h3 className="font-display font-bold text-lg text-white mb-2">
-                Analyzing Intelligent Contract Code
-              </h3>
-              <p className="text-xs text-slate-400 font-sans max-w-sm mb-4">
-                GenLayer validator nodes are non-deterministically retrieving external provider security evidence and achieving Byzantine agreement.
-              </p>
-
-              {scanState.txHash && (
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-400">
-                  <span>Tx:</span>
-                  <span className="text-cyan-400 font-bold">{fmt(scanState.txHash)}</span>
+      {/* ── MAIN THREE-COLUMN GRID ── */}
+      <main className="w-full pt-20 bg-transparent min-h-screen px-4 sm:px-8 lg:px-10 py-6 relative z-10">
+        <div className="flex flex-col w-full h-full text-on-surface">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 w-full max-w-[1920px] mx-auto">
+            
+            {/* ════════════════════════════════════════════════════════════════
+                LEFT COLUMN: Config
+            ════════════════════════════════════════════════════════════════ */}
+            <div className="col-span-1 md:col-span-3 flex flex-col gap-6">
+              
+              {/* LOGO AREA */}
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 flex flex-col items-center justify-center relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)]">
+                <div className="absolute inset-0 bg-gradient-to-b from-primary-container/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+                <img
+                  alt="Scam Shield Logo"
+                  className="w-32 h-32 object-contain relative z-10 drop-shadow-[0_0_20px_rgba(0,255,194,0.5)] rounded-2xl"
+                  src="/logo.jpg"
+                />
+                <div className="mt-4 flex flex-col items-center relative z-10">
+                  <span className="font-display-lg text-[24px] text-primary tracking-widest uppercase font-bold drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+                    Scam Shield
+                  </span>
+                  <span className="font-label-caps text-primary-container mt-2 flex items-center gap-2 opacity-80 drop-shadow-[0_0_3px_rgba(0,255,194,0.3)]">
+                    <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                    System Active
+                  </span>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
 
-          {/* Case 2: Finalized Result Dossier */}
-          {currentResult && !busy && (
-            <div className="flex flex-col gap-6">
-              {/* Verdict Card */}
-              <VerdictCard result={currentResult} />
-
-              {/* Authoritative Market & Identity Telemetry */}
-              {(() => {
-                const rt = currentResult.realTokenData
-                const price = rt?.price ? `$${rt.price < 0.0001 ? rt.price.toExponential(2) : rt.price.toFixed(4)}` : 'N/A'
-                const liq   = rt?.liquidity != null ? `$${Math.round(rt.liquidity).toLocaleString()}` : 'N/A'
-                const fdv   = rt?.fdv != null ? `$${Math.round(rt.fdv).toLocaleString()}` : 'N/A'
-                const sup   = rt?.totalSupply || 'N/A'
-                const buyT  = rt?.buyTax ? `${rt.buyTax}%` : '0%'
-                const sellT = rt?.sellTax ? `${rt.sellTax}%` : '0%'
-
-                return (
-                  <div className="glass-card p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Database className="w-4 h-4 text-cyan-400" />
-                        <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
-                          On-Chain Contract Metrics
-                        </h3>
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-500 uppercase">Provider Verified</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {[
-                        { label: 'PRICE', value: price, desc: 'Market Price' },
-                        { label: 'LIQUIDITY', value: liq, desc: 'DEX Liquidity' },
-                        { label: 'FDV', value: fdv, desc: 'Fully Diluted Val' },
-                        { label: 'TOTAL SUPPLY', value: sup, desc: 'Circulating Supply' },
-                        { label: 'BUY TAX', value: buyT, desc: 'Purchase Fee' },
-                        { label: 'SELL TAX', value: sellT, desc: 'Disposal Fee' },
-                      ].map((item, i) => (
-                        <div key={i} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                          <div className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">{item.label}</div>
-                          <div className="text-sm font-mono font-bold text-white mt-0.5 truncate" title={item.value}>{item.value}</div>
-                          <div className="text-[8px] font-sans text-slate-600 mt-0.5">{item.desc}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })()}
-
-              {/* Risk Flags */}
-              <RiskFlags flags={currentResult.flags} />
-
-              {/* Authentic GenLayer Validator Committee */}
-              {currentResult.validatorVotes && currentResult.validatorVotes.length > 0 && (
-                <div className="glass-card p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-cyan-400" />
-                      <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
-                        GenLayer Validator Committee ({currentResult.validatorVotes.length} Nodes)
-                      </h3>
-                    </div>
-                    <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 uppercase">
-                      {currentResult.telemetry?.resultName || 'CONSENSUS VERIFIED'}
+              {/* SCANNER CONFIG */}
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 flex flex-col gap-5 relative shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)]">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2 font-bold tracking-wider">
+                    <span className="material-symbols-outlined text-primary-container drop-shadow-[0_0_5px_rgba(0,255,194,0.4)]">
+                      tune
                     </span>
+                    CONFIG
+                  </h2>
+                  <span className="font-mono text-[9px] text-text-muted uppercase">61999</span>
+                </div>
+
+                <form onSubmit={handleScanSubmit} className="flex flex-col gap-4">
+                  {/* Contract Address Input */}
+                  <div className="flex flex-col gap-2">
+                    <label className="font-label-caps text-text-muted font-semibold tracking-widest">
+                      CONTRACT ADDRESS
+                    </label>
+                    <div className="relative group">
+                      <input
+                        id="token-address-input"
+                        type="text"
+                        value={tokenAddress}
+                        onChange={e => { setTokenAddress(e.target.value); setValidationError('') }}
+                        placeholder="Paste address here..."
+                        disabled={busy}
+                        className="w-full bg-surface-container-highest/50 backdrop-blur-sm border border-border-subtle rounded text-primary-container font-code-sm font-medium px-4 py-3 pr-10 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all focus:shadow-[0_0_15px_rgba(0,255,194,0.15)] placeholder:text-text-muted/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={handlePaste}
+                        disabled={busy}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary-container hover:drop-shadow-[0_0_5px_rgba(0,255,194,0.5)] transition-all p-1 cursor-pointer"
+                        title="Paste from clipboard"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">content_paste</span>
+                      </button>
+                    </div>
+                    {validationError && (
+                      <span className="text-[11px] font-mono text-alert-critical mt-1">{validationError}</span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {currentResult.validatorVotes.map((v, i) => {
-                      const bad = v.vote === 'SCAM' || v.vote === 'RISKY'
-                      const col = bad ? 'text-rose-400' : 'text-cyan-400'
+                  {/* Network Selection */}
+                  <div className="flex flex-col gap-2 mt-1">
+                    <label className="font-label-caps text-text-muted font-semibold tracking-widest">
+                      NETWORK
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {CHAINS.map(c => {
+                        const active = selectedChain === c.id
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setSelectedChain(c.id)}
+                            disabled={busy}
+                            className={`flex flex-col items-center justify-center py-2.5 rounded transition-all cursor-pointer ${
+                              active
+                                ? 'bg-primary-container/10 border border-primary-container text-primary-container shadow-[inset_0_0_10px_rgba(0,255,194,0.1)] drop-shadow-[0_0_5px_rgba(0,255,194,0.2)]'
+                                : 'bg-surface-container-highest/30 border border-border-subtle text-text-muted hover:border-primary-container/50 hover:text-primary-container hover:bg-primary-container/5'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined mb-0.5 text-[18px]">{c.icon}</span>
+                            <span className="font-label-caps text-[10px] font-bold">{c.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
-                      return (
-                        <div key={i} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex flex-col justify-between gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-mono text-slate-500 font-bold">Node #{i + 1}</span>
-                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-cyan-950/40 border border-cyan-800/40 text-cyan-300">
-                              {v.voteName || 'AGREE'}
-                            </span>
-                          </div>
-                          <div className="font-mono text-[10px] text-slate-300 truncate" title={v.validatorAddress}>
-                            {fmt(v.validatorAddress)}
-                          </div>
-                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-900 text-[10px] font-mono font-bold">
-                            <span className={col}>{v.vote}</span>
-                            <span className="text-[9px] text-emerald-400 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> VERIFIED
-                            </span>
-                          </div>
+                  {/* Initiate Scan Button with Shimmer */}
+                  <div className="mt-3">
+                    <button
+                      id="scan-submit-btn"
+                      type="submit"
+                      disabled={busy}
+                      className="w-full py-4 bg-primary-container text-background font-label-caps text-[14px] font-bold tracking-widest rounded-sm relative overflow-hidden group hover:bg-primary-fixed transition-colors shadow-[0_0_20px_rgba(0,255,194,0.4)] hover:shadow-[0_0_35px_rgba(0,255,194,0.6)] flex justify-center items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">radar</span>
+                      <span>{busy ? 'SCANNING...' : 'INITIATE SCAN'}</span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shimmer" />
+                    </button>
+                  </div>
+                </form>
+
+                {/* Quick Sample Targets */}
+                <div className="pt-3 border-t border-border-subtle">
+                  <span className="font-label-caps text-[10px] text-text-muted font-semibold tracking-widest block mb-2">
+                    SAMPLE CONTRACTS
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {QUICK_TARGETS.map((t, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => selectQuickTarget(t.addr, t.chainId)}
+                        disabled={busy}
+                        className="px-2.5 py-2 rounded bg-surface-container-highest/30 border border-border-subtle hover:border-primary-container/50 text-left transition-all cursor-pointer group flex items-center justify-between"
+                      >
+                        <span className="font-code-sm text-xs font-bold text-on-surface group-hover:text-primary-container">
+                          {t.name}
+                        </span>
+                        <span className={`font-label-caps text-[9px] px-1 rounded ${
+                          t.safe ? 'text-primary-container bg-primary-container/10' : 'text-alert-critical bg-alert-critical/10'
+                        }`}>
+                          {t.chain}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ════════════════════════════════════════════════════════════════
+                CENTER COLUMN: Live Feed
+            ════════════════════════════════════════════════════════════════ */}
+            <div className="col-span-1 md:col-span-6 flex flex-col h-full min-h-[600px] gap-6">
+              
+              {/* Terminal Card */}
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl flex flex-col h-full overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] relative">
+                <div className="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,255,194,0.015)] pointer-events-none" />
+                
+                {/* Terminal Header */}
+                <div className="bg-surface-container-lowest/80 backdrop-blur-md px-6 py-4 border-b border-primary-container/10 flex justify-between items-center z-10">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-primary-container drop-shadow-[0_0_5px_rgba(0,255,194,0.4)]">
+                      terminal
+                    </span>
+                    <h2 className="font-headline-md text-[18px] text-primary-container tracking-widest font-bold">
+                      DECENTRALIZED THREAT DETECTION
+                    </h2>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 rounded-full border border-border-subtle bg-surface-container-highest shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
+                    <div className="w-3 h-3 rounded-full border border-border-subtle bg-surface-container-highest shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
+                    <div className="w-3 h-3 rounded-full border border-border-subtle bg-surface-container-highest shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
+                  </div>
+                </div>
+
+                {/* Terminal Body */}
+                <div
+                  ref={terminalRef}
+                  className="flex-1 p-6 bg-surface-container-lowest/90 font-code-sm text-secondary overflow-y-auto relative max-h-[500px]"
+                  id="terminal-feed"
+                >
+                  <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(5,6,13,0)_50%,rgba(0,0,0,0.4)_50%),linear-gradient(90deg,rgba(0,255,194,0.02),rgba(0,0,0,0),rgba(20,209,255,0.02))] z-10 bg-[length:100%_4px,100%_100%] opacity-40" />
+                  
+                  <div className="flex flex-col gap-3 relative z-20 font-medium tracking-wide">
+                    <div className="flex gap-4 opacity-70">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:11</span>
+                      <span className="text-on-surface-variant">&gt; INITIATING SCAM_SHIELD PROTOCOL v2.4</span>
+                    </div>
+                    <div className="flex gap-4 opacity-70">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:12</span>
+                      <span className="text-secondary">&gt; Connecting to Swarm Intelligence Network...</span>
+                    </div>
+                    <div className="flex gap-4 opacity-90">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:13</span>
+                      <span className="text-primary-container drop-shadow-[0_0_2px_rgba(0,255,194,0.5)]">
+                        &gt; Connection established. Nodes active: <span className="font-bold">1,402</span>
+                      </span>
+                    </div>
+
+                    {/* Active Target Info */}
+                    <div className="flex gap-4 mt-2">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:15</span>
+                      <span className="text-primary font-bold">
+                        &gt; TARGET ACQUIRED: {tokenAddress ? fmt(tokenAddress) : '0x5802...12b7 (Studionet Active)'}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:16</span>
+                      <span className="text-secondary animate-pulse">&gt; AI Agent Scoping...</span>
+                    </div>
+                    <div className="flex gap-4 pl-24">
+                      <span className="text-outline">├── Analyzing bytecode... <span className="text-primary-container">[OK]</span></span>
+                    </div>
+                    <div className="flex gap-4 pl-24">
+                      <span className="text-outline">├── Decompiling logic... <span className="text-primary-container">[OK]</span></span>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:18</span>
+                      <span className="text-secondary">&gt; Querying LLM Ensembles...</span>
+                    </div>
+
+                    {/* Live State Steps */}
+                    {busy && (
+                      <>
+                        <div className="flex gap-4">
+                          <span className="text-text-muted w-20 shrink-0 font-light">14:02:20</span>
+                          <span className="text-primary-container font-bold">&gt; GenLayer Consensus Round In Progress ({scanState.status.toUpperCase()})...</span>
                         </div>
-                      )
-                    })}
+                        {scanState.txHash && (
+                          <div className="flex gap-4 pl-24">
+                            <span className="text-secondary">├── Tx Broadcast: <span className="text-primary-container">{fmt(scanState.txHash)}</span></span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div className="flex gap-4">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:22</span>
+                      <span className="text-primary-container">
+                        &gt; Honeypot Check:{' '}
+                        <span className="bg-primary-container/20 px-1.5 py-0.5 rounded text-primary-container font-bold border border-primary-container/30 shadow-[0_0_8px_rgba(0,255,194,0.3)]">
+                          {currentResult && currentResult.verdict === 'SCAM' ? 'DETECTED' : 'PASSED'}
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:23</span>
+                      <span className="text-primary-container">
+                        &gt; Mint Authority:{' '}
+                        <span className="bg-primary-container/20 px-1.5 py-0.5 rounded text-primary-container font-bold border border-primary-container/30 shadow-[0_0_8px_rgba(0,255,194,0.3)]">
+                          REVOKED
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:24</span>
+                      <span className="text-tertiary-fixed drop-shadow-[0_0_3px_rgba(255,226,83,0.5)]">
+                        &gt; Liquidity Lock:{' '}
+                        <span className="bg-tertiary-fixed/20 px-1.5 py-0.5 rounded text-tertiary-fixed font-bold border border-tertiary-fixed/30 shadow-[0_0_10px_rgba(255,226,83,0.4)]">
+                          WARNING (60 DAYS)
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="flex gap-4 mt-2">
+                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:25</span>
+                      <span className="text-on-surface font-bold">
+                        &gt; {busy ? 'VALIDATORS COMMITTING VOTES...' : currentResult ? 'CONSENSUS STATE FINALIZED' : 'AWAITING FINAL CONSENSUS...'}
+                      </span>
+                      <span className="w-2.5 h-4 bg-primary-container inline-block animate-blink shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                    </div>
                   </div>
+                </div>
+              </div>
+
+              {/* When Finalized: Render Dossier & Committee */}
+              {currentResult && !busy && (
+                <div className="flex flex-col gap-6">
+                  <VerdictCard result={currentResult} />
+                  
+                  {/* Real Metrics */}
+                  {(() => {
+                    const rt = currentResult.realTokenData
+                    const price = rt?.price ? `$${rt.price < 0.0001 ? rt.price.toExponential(2) : rt.price.toFixed(4)}` : 'N/A'
+                    const liq   = rt?.liquidity != null ? `$${Math.round(rt.liquidity).toLocaleString()}` : 'N/A'
+                    const fdv   = rt?.fdv != null ? `$${Math.round(rt.fdv).toLocaleString()}` : 'N/A'
+                    const sup   = rt?.totalSupply || 'N/A'
+                    const buyT  = rt?.buyTax ? `${rt.buyTax}%` : '0%'
+                    const sellT = rt?.sellTax ? `${rt.sellTax}%` : '0%'
+
+                    return (
+                      <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-label-caps text-text-muted font-bold tracking-widest flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[18px] text-primary-container">database</span>
+                            ON-CHAIN EVIDENCE METRICS
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {[
+                            { label: 'PRICE', value: price },
+                            { label: 'LIQUIDITY', value: liq },
+                            { label: 'FDV', value: fdv },
+                            { label: 'CIRCULATING SUPPLY', value: sup },
+                            { label: 'BUY TAX', value: buyT },
+                            { label: 'SELL TAX', value: sellT },
+                          ].map((m, i) => (
+                            <div key={i} className="p-3 bg-surface-container-highest/30 border border-border-subtle rounded">
+                              <div className="text-[10px] font-label-caps text-text-muted font-bold">{m.label}</div>
+                              <div className="text-sm font-code-sm font-bold text-on-surface mt-1 truncate" title={m.value}>{m.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  <RiskFlags flags={currentResult.flags} />
+
+                  {/* Real Validator Votes */}
+                  {currentResult.validatorVotes && currentResult.validatorVotes.length > 0 && (
+                    <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6">
+                      <h3 className="font-label-caps text-text-muted font-bold tracking-widest mb-3 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[18px] text-primary-container">verified_user</span>
+                        VALIDATOR COMMITTEE ({currentResult.validatorVotes.length} NODES)
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {currentResult.validatorVotes.map((v, i) => (
+                          <div key={i} className="p-3 bg-surface-container-highest/30 border border-border-subtle rounded flex flex-col justify-between gap-2">
+                            <div className="flex items-center justify-between text-[10px] font-code-sm">
+                              <span className="text-text-muted font-bold">Node #{i + 1}</span>
+                              <span className="text-primary-container font-bold">{v.voteName || 'AGREE'}</span>
+                            </div>
+                            <div className="font-code-sm text-xs text-on-surface truncate">{fmt(v.validatorAddress)}</div>
+                            <div className="flex items-center justify-between pt-2 border-t border-border-subtle/50 text-[10px] font-code-sm">
+                              <span className={v.vote === 'SCAM' ? 'text-alert-critical font-bold' : 'text-primary-container font-bold'}>{v.vote}</span>
+                              <span className="text-primary-container">VERIFIED</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
 
-          {/* Case 3: Idle / Standby Screen (Command Center Hero) */}
-          {!busy && !currentResult && (
-            <div className="glass-card p-6 sm:p-8 flex flex-col gap-6 items-center text-center">
-              <div className="flex flex-col items-center w-full max-w-lg">
-                <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border border-cyan-500/20 animate-spin-slow" />
-                  <div className="absolute inset-2 rounded-full border border-dashed border-cyan-400/40 animate-pulse-glow" />
-                  <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center shadow-[0_0_24px_rgba(0,242,254,0.2)]">
-                    <Shield className="w-8 h-8 text-cyan-300" />
+            {/* ════════════════════════════════════════════════════════════════
+                RIGHT COLUMN: Insights
+            ════════════════════════════════════════════════════════════════ */}
+            <div className="col-span-1 md:col-span-3 flex flex-col gap-6">
+              
+              {/* CONSENSUS ENGINE */}
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)] relative overflow-hidden">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary-container/10 rounded-full blur-3xl mix-blend-screen pointer-events-none" />
+                <h3 className="font-label-caps text-text-muted mb-4 flex items-center gap-2 font-bold tracking-widest">
+                  <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
+                    donut_large
+                  </span>
+                  CONSENSUS ENGINE
+                </h3>
+
+                {/* Simulated Donut Chart using SVG */}
+                <div className="flex items-center justify-center py-4">
+                  <div className="relative w-40 h-40 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90 drop-shadow-[0_0_15px_rgba(0,255,194,0.5)]" viewBox="0 0 100 100">
+                      <defs>
+                        <filter id="glow">
+                          <feGaussianBlur result="coloredBlur" stdDeviation="2.5" />
+                          <feMerge>
+                            <feMergeNode in="coloredBlur" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
+                        </filter>
+                      </defs>
+                      <circle
+                        className="text-surface-container-highest/50"
+                        cx="50"
+                        cy="50"
+                        fill="transparent"
+                        r="40"
+                        stroke="currentColor"
+                        strokeWidth="6"
+                      />
+                      <circle
+                        style={{ stroke: donutColor, transition: 'stroke-dashoffset 1s ease-out' }}
+                        cx="50"
+                        cy="50"
+                        fill="transparent"
+                        filter="url(#glow)"
+                        r="40"
+                        strokeDasharray="251.2"
+                        strokeDashoffset={donutOffset}
+                        strokeLinecap="round"
+                        strokeWidth="6"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center drop-shadow-[0_0_8px_rgba(0,255,194,0.4)]">
+                      <span className="font-display-lg text-[36px] text-primary-container leading-none font-bold">
+                        {currentResult ? 100 - activeScore : 98}
+                        <span className="text-[18px] opacity-80">%</span>
+                      </span>
+                      <span className="font-label-caps text-[11px] text-primary mt-1 tracking-widest font-bold" style={{ color: donutColor }}>
+                        {donutStatusText}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-widest text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 mb-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                  SYSTEM STANDBY • READY FOR ANALYSIS
-                </div>
+                {/* 5 Stages (Strictly STANDBY when idle) */}
+                <div className="flex flex-col gap-2 mt-2 pt-3 border-t border-border-subtle">
+                  {CONSENSUS_STAGES.map((s, idx) => {
+                    let statusLabel = 'STANDBY'
+                    let badgeClass = 'text-text-muted bg-surface-container-highest/40 border-border-subtle'
 
-                <h3 className="font-display font-black text-2xl text-white mb-2 tracking-wide">
-                  Decentralized Threat Intelligence
+                    if (busy) {
+                      let currentIdx = 0
+                      if (scanState.status === 'proposing') currentIdx = 1
+                      else if (scanState.status === 'committing') currentIdx = 2
+                      else if (scanState.status === 'revealing') currentIdx = 3
+                      else if (scanState.status === 'accepted') currentIdx = 4
+
+                      if (idx < currentIdx) {
+                        statusLabel = 'DONE'
+                        badgeClass = 'text-primary-container bg-primary-container/10 border-primary-container/30'
+                      } else if (idx === currentIdx) {
+                        statusLabel = 'RUNNING'
+                        badgeClass = 'text-primary-container bg-primary-container/20 border-primary-container animate-pulse'
+                      } else {
+                        statusLabel = 'QUEUED'
+                        badgeClass = 'text-text-muted bg-surface-container-highest/20 border-border-subtle'
+                      }
+                    } else if (currentResult) {
+                      statusLabel = 'VERIFIED'
+                      badgeClass = 'text-primary-container bg-primary-container/10 border-primary-container/30'
+                    }
+
+                    return (
+                      <div key={s.stage} className="flex items-center justify-between text-[11px] font-code-sm p-1.5 rounded bg-surface-container-highest/20">
+                        <span className="text-on-surface-variant font-medium">{s.stage} {s.name}</span>
+                        <span className={`font-label-caps text-[9px] px-1.5 py-0.5 rounded border ${badgeClass}`}>{statusLabel}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* INTELLIGENCE SUMMARY */}
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)]">
+                <h3 className="font-label-caps text-text-muted mb-4 flex items-center gap-2 font-bold tracking-widest">
+                  <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
+                    summarize
+                  </span>
+                  INTELLIGENCE SUMMARY
                 </h3>
-                <p className="text-xs text-slate-400 font-sans leading-relaxed mb-6">
-                  Broadcast any smart contract address on Ethereum, BSC, Solana, or Layer-2s to trigger decentralized multi-agent Byzantine consensus directly across GenLayer validator nodes.
+                <p className="font-body-md text-on-surface-variant text-[14px] leading-relaxed">
+                  AI heuristic engines indicate{' '}
+                  <span className="text-primary-container font-semibold drop-shadow-[0_0_2px_rgba(0,255,194,0.3)]">
+                    {isMalicious ? 'high probability of attack vector' : 'low probability'}
+                  </span>{' '}
+                  of malicious intent.{' '}
+                  {isMalicious
+                    ? 'Security filters flag suspicious contract logic or liquidity lock vulnerability.'
+                    : 'Ownership is renounced and core functions are standardized.'}{' '}
+                  <span className="text-tertiary-fixed font-semibold drop-shadow-[0_0_2px_rgba(255,226,83,0.3)]">
+                    Monitor liquidity duration.
+                  </span>
                 </p>
               </div>
 
-              {/* 3 Core Architecture Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left font-sans">
-                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all">
-                  <div className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                    Byzantine AI
-                  </div>
-                  <div className="text-xs font-bold text-white mb-1">5-Node BFT Committee</div>
-                  <div className="text-[10px] text-slate-400 leading-normal">Independent validator nodes evaluate AST bytecode without centralized oracle risk.</div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all">
-                  <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    Chain-Bounded
-                  </div>
-                  <div className="text-xs font-bold text-white mb-1">Strict Evidence Filter</div>
-                  <div className="text-[10px] text-slate-400 leading-normal">Rejects out-of-chain token data. Never substitutes cross-chain metadata or phantom pairs.</div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all">
-                  <div className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                    Equivalence Principle
-                  </div>
-                  <div className="text-xs font-bold text-white mb-1">Material Field Agreement</div>
-                  <div className="text-[10px] text-slate-400 leading-normal">Validators must agree on token identity, verdict, risk bracket, and core threat drivers.</div>
-                </div>
-              </div>
-
-              {/* Status Bar */}
-              <div className="w-full mt-6 pt-4 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] font-mono">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <span className="text-slate-500">Intelligent Contract:</span>
-                  <span className="font-bold text-slate-200">{fmt(CONTRACT)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="text-emerald-400 font-bold">GenLayer Studio Net Verified</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── RIGHT PANEL: CONSENSUS ENGINE PIPELINE & ARCHITECTURE ── */}
-        <div className="flex flex-col gap-6 w-full">
-          <div className="glass-card p-5">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-cyan-400" />
-                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
-                  AI Consensus Engine
-                </h3>
-              </div>
-              <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase border ${
-                busy ? 'bg-cyan-950/40 text-cyan-400 border-cyan-500/30 animate-pulse' : 'bg-slate-900 text-slate-500 border-slate-800'
-              }`}>
-                {busy ? 'Running' : currentResult ? 'Finalized' : 'Standby'}
-              </span>
-            </div>
-
-            {/* 5 Consensus Stages */}
-            <div className="flex flex-col gap-2">
-              {CONSENSUS_PIPELINE.map((s, idx) => {
-                let statusLabel = 'STANDBY'
-                let badgeStyle = 'bg-slate-900/60 text-slate-500 border-slate-800/60'
-                let numColor = 'text-slate-600'
-                let titleColor = 'text-slate-400'
-                let containerClass = 'opacity-60 bg-slate-950/30 border-slate-900/60'
-
-                if (busy) {
-                  let currentIdx = 0
-                  if (scanState.status === 'proposing') currentIdx = 1
-                  else if (scanState.status === 'committing') currentIdx = 2
-                  else if (scanState.status === 'revealing') currentIdx = 3
-                  else if (scanState.status === 'accepted') currentIdx = 4
-
-                  if (idx < currentIdx) {
-                    statusLabel = 'DONE'
-                    badgeStyle = 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40'
-                    numColor = 'text-emerald-400'
-                    titleColor = 'text-slate-300'
-                    containerClass = 'bg-slate-950/50 border-slate-800/60'
-                  } else if (idx === currentIdx) {
-                    statusLabel = 'RUNNING'
-                    badgeStyle = 'bg-cyan-950/50 text-cyan-400 border-cyan-500/40 animate-pulse'
-                    numColor = 'text-cyan-400'
-                    titleColor = 'text-white font-bold'
-                    containerClass = 'bg-cyan-950/15 border-cyan-500/30'
-                  } else {
-                    statusLabel = 'QUEUED'
-                    badgeStyle = 'bg-slate-900/40 text-slate-600 border-slate-800/40'
-                    numColor = 'text-slate-600'
-                    titleColor = 'text-slate-500'
-                    containerClass = 'bg-slate-950/20 border-slate-900/40'
-                  }
-                } else if (currentResult) {
-                  statusLabel = 'VERIFIED'
-                  badgeStyle = 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40'
-                  numColor = 'text-emerald-400'
-                  titleColor = 'text-slate-200'
-                  containerClass = 'bg-slate-950/60 border-slate-800/80'
-                }
-
-                return (
-                  <div
-                    key={s.stage}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 transition-all ${containerClass}`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className={`font-mono text-xs font-bold ${numColor}`}>{s.stage}</span>
-                      <div className="truncate">
-                        <div className={`text-xs font-sans truncate ${titleColor}`}>{s.name}</div>
-                        <div className="text-[9px] font-mono text-slate-500 truncate">{s.desc}</div>
-                      </div>
-                    </div>
-                    <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border uppercase flex-shrink-0 ${badgeStyle}`}>
-                      {statusLabel}
+              {/* SCAN HISTORY */}
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-0 shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)] overflow-hidden">
+                <div className="p-4 border-b border-border-subtle bg-surface-container-highest/30">
+                  <h3 className="font-label-caps text-text-muted flex items-center gap-2 font-bold tracking-widest">
+                    <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
+                      history
                     </span>
-                  </div>
-                )
-              })}
-            </div>
+                    RECENT AUDITS
+                  </h3>
+                </div>
+                <div className="flex flex-col">
+                  {recentScans.length > 0 ? (
+                    recentScans.map((s, idx) => {
+                      const bad = s.verdict === 'SCAM' || s.verdict === 'RISKY'
+                      const unk = s.verdict === 'UNKNOWN'
+                      const badgeClass = bad
+                        ? 'bg-alert-critical/10 border-alert-critical/30 text-alert-critical'
+                        : unk
+                        ? 'bg-tertiary-fixed/10 border-tertiary-fixed/30 text-tertiary-fixed'
+                        : 'bg-secondary/10 border-secondary/30 text-secondary'
+                      const iconName = bad ? 'block' : unk ? 'warning' : 'check'
+                      const tokenSymbol = s.realTokenData?.symbol || s.tokenIdentity?.symbol || 'TOKEN'
 
-            {/* Architecture specification */}
-            <div className="mt-5 pt-4 border-t border-slate-800/80 text-[11px] font-sans text-slate-400 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500">Intelligent Contract:</span>
-                <button
-                  onClick={copyContractAddr}
-                  className="font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
-                  title={CONTRACT}
-                >
-                  {fmt(CONTRACT)}
-                  {copiedAddr ? <span className="text-[9px] text-emerald-400">COPIED</span> : null}
-                </button>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500">Consensus Model:</span>
-                <span className="font-mono text-slate-300">Material Equivalence</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500">Chain Scope:</span>
-                <span className="font-mono text-slate-300">Strict Bounded</span>
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setViewingScan(s)}
+                          className="flex items-center justify-between p-4 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary shadow-[0_0_10px_rgba(166,230,255,0.15)] group-hover:shadow-[0_0_15px_rgba(166,230,255,0.3)] transition-all">
+                              <span className="material-symbols-outlined text-[16px]">{iconName}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-code-sm text-primary font-bold tracking-wide">{tokenSymbol}</span>
+                              <span className="font-label-caps text-[9px] text-text-muted/80">{fmt(s.tokenAddress)}</span>
+                            </div>
+                          </div>
+                          <div className={`px-2 py-1 border rounded font-label-caps text-[10px] font-bold ${badgeClass}`}>
+                            {s.verdict}
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <>
+                      {/* Row 1 */}
+                      <div className="flex items-center justify-between p-4 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary shadow-[0_0_10px_rgba(166,230,255,0.15)] group-hover:shadow-[0_0_15px_rgba(166,230,255,0.3)] transition-all">
+                            <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(166,230,255,0.5)]">check</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-code-sm text-primary font-bold tracking-wide">PEPE_V2</span>
+                            <span className="font-label-caps text-[9px] text-text-muted/80">2m ago</span>
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 bg-secondary/10 border border-secondary/30 rounded font-label-caps text-[10px] text-secondary font-bold shadow-[0_0_5px_rgba(166,230,255,0.2)]">
+                          SAFE
+                        </div>
+                      </div>
+
+                      {/* Row 2 */}
+                      <div className="flex items-center justify-between p-4 border-b border-border-subtle/50 hover:bg-tertiary-fixed/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-tertiary-fixed/10 border border-tertiary-fixed/30 flex items-center justify-center text-tertiary-fixed shadow-[0_0_10px_rgba(255,226,83,0.15)] group-hover:shadow-[0_0_15px_rgba(255,226,83,0.3)] transition-all">
+                            <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(255,226,83,0.5)]">warning</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-code-sm text-primary font-bold tracking-wide">SHIB_AI</span>
+                            <span className="font-label-caps text-[9px] text-text-muted/80">14m ago</span>
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 bg-tertiary-fixed/10 border border-tertiary-fixed/30 rounded font-label-caps text-[10px] text-tertiary-fixed font-bold shadow-[0_0_5px_rgba(255,226,83,0.2)]">
+                          WARN
+                        </div>
+                      </div>
+
+                      {/* Row 3 */}
+                      <div className="flex items-center justify-between p-4 hover:bg-alert-critical/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-alert-critical/10 border border-alert-critical/30 flex items-center justify-center text-alert-critical shadow-[0_0_10px_rgba(255,62,62,0.15)] group-hover:shadow-[0_0_15px_rgba(255,62,62,0.3)] transition-all">
+                            <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(255,62,62,0.5)]">block</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-code-sm text-primary font-bold tracking-wide">DOGE_X</span>
+                            <span className="font-label-caps text-[9px] text-text-muted/80">1h ago</span>
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 bg-alert-critical/10 border border-alert-critical/30 rounded font-label-caps text-[10px] text-alert-critical font-bold shadow-[0_0_5px_rgba(255,62,62,0.2)]">
+                          HONEYPOT
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </main>
-
-      {/* ── FOOTER ── */}
-      <footer className="w-full border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-auto text-xs font-mono text-slate-500 flex justify-center">
-        <div className="w-full max-w-[1720px] flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <div>
-            ScamShield AI • Powered by GenLayer Intelligent Contracts & Decentralized Validators
-          </div>
-          <div className="flex items-center gap-4">
-            <a
-              href="https://studio.genlayer.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-cyan-400 transition-colors"
-            >
-              GenLayer Studio
-            </a>
-            <span>•</span>
-            <a
-              href="https://github.com/YousufAziz1/scamshield"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-cyan-400 transition-colors"
-            >
-              GitHub
-            </a>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }
