@@ -369,7 +369,7 @@ export default function App() {
 
           {/* Case 3: Idle / Standby Screen (Command Center Hero) */}
           {!busy && !currentResult && (
-            <div className="glass-card p-6 sm:p-8 flex flex-col items-center justify-between min-h-[560px] text-center">
+            <div className="glass-card p-6 sm:p-8 flex flex-col gap-6 items-center text-center">
               <div className="flex flex-col items-center w-full max-w-lg">
                 <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
                   <div className="absolute inset-0 rounded-full border border-cyan-500/20 animate-spin-slow" />
