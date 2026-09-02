@@ -155,18 +155,24 @@ export default function App() {
     <div className="bg-background font-body-md text-on-background min-h-screen">
       
       {/* ── HEADER ── */}
-      <header className="fixed top-0 w-full z-50 bg-surface-container/40 backdrop-blur-2xl border-b border-primary-container/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-        <div className="h-16 w-full px-4 sm:px-8 lg:px-10 flex items-center justify-between">
+      <header className="sticky top-0 w-full z-50 bg-surface-container/80 backdrop-blur-2xl border-b border-border-subtle shadow-[0_4px_30px_rgba(0,0,0,0.6)]">
+        <div className="h-16 w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary-container/10 border border-primary-container/30 rounded shadow-[0_0_10px_rgba(0,255,194,0.2)] flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary-container text-[20px] drop-shadow-[0_0_5px_rgba(0,255,194,0.5)]">
-                  security
-                </span>
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo.jpg"
+                alt="ScamShield Logo"
+                className="w-8 h-8 rounded-lg object-cover border border-primary-container/40 shadow-[0_0_12px_rgba(0,255,194,0.3)]"
+              />
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-display-lg text-sm text-white tracking-wider font-extrabold">SCAMSHIELD</span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-primary-container/15 border border-primary-container/30 text-primary-container font-bold">
+                    AI
+                  </span>
+                </div>
+                <span className="text-[8px] font-mono text-text-muted/70 tracking-widest uppercase">GENLAYER CONSENSUS</span>
               </div>
-              <span className="font-label-caps text-label-caps text-primary tracking-widest font-bold">
-                VOID_CORE
-              </span>
             </div>
 
             <nav className="hidden lg:flex items-center gap-6 ml-6 h-16">
@@ -250,36 +256,44 @@ export default function App() {
       </AnimatePresence>
 
       {/* ── MAIN THREE-COLUMN GRID ── */}
-      <main className="w-full pt-20 bg-transparent min-h-screen px-4 sm:px-8 lg:px-10 py-6 relative z-10">
-        <div className="flex flex-col w-full h-full text-on-surface">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 w-full max-w-[1920px] mx-auto">
+      <main className="w-full flex-1 bg-transparent px-4 sm:px-6 lg:px-8 py-5 relative z-10 flex flex-col">
+        <div className="flex flex-col flex-1 w-full text-on-surface">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 w-full max-w-[1920px] mx-auto flex-1">
             
             {/* ════════════════════════════════════════════════════════════════
                 LEFT COLUMN: Config
             ════════════════════════════════════════════════════════════════ */}
-            <div className="col-span-1 md:col-span-3 flex flex-col gap-6">
+            <div className="col-span-1 md:col-span-3 flex flex-col gap-4">
               
               {/* LOGO AREA */}
-              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 flex flex-col items-center justify-center relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)]">
-                <div className="absolute inset-0 bg-gradient-to-b from-primary-container/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-4 flex items-center gap-4 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary-container/10 via-secondary-container/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                 <img
                   alt="Scam Shield Logo"
-                  className="w-32 h-32 object-contain relative z-10 drop-shadow-[0_0_20px_rgba(0,255,194,0.5)] rounded-2xl"
+                  className="w-14 h-14 object-cover relative z-10 drop-shadow-[0_0_15px_rgba(0,255,194,0.5)] rounded-xl border border-primary-container/30"
                   src="/logo.jpg"
                 />
-                <div className="mt-4 flex flex-col items-center relative z-10">
-                  <span className="font-display-lg text-[24px] text-primary tracking-widest uppercase font-bold drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
-                    Scam Shield
-                  </span>
-                  <span className="font-label-caps text-primary-container mt-2 flex items-center gap-2 opacity-80 drop-shadow-[0_0_3px_rgba(0,255,194,0.3)]">
+                <div className="flex flex-col relative z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display-lg text-[17px] text-white tracking-wider uppercase font-bold drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]">
+                      Scam Shield
+                    </span>
+                    <span className="text-[9px] font-mono px-1 rounded bg-primary-container/15 text-primary-container border border-primary-container/30 font-bold">
+                      v2.4
+                    </span>
+                  </div>
+                  <span className="font-label-caps text-[10px] text-primary-container mt-1 flex items-center gap-2 opacity-90">
                     <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
-                    System Active
+                    System Active • Studionet
+                  </span>
+                  <span className="text-[9px] font-mono text-text-muted mt-0.5">
+                    Intelligent Contract Consensus
                   </span>
                 </div>
               </div>
 
               {/* SCANNER CONFIG */}
-              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 flex flex-col gap-5 relative shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)]">
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 flex flex-col gap-4 relative shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
                 <div className="flex items-center justify-between mb-1">
                   <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2 font-bold tracking-wider">
                     <span className="material-symbols-outlined text-primary-container drop-shadow-[0_0_5px_rgba(0,255,194,0.4)]">
@@ -304,7 +318,7 @@ export default function App() {
                         onChange={e => { setTokenAddress(e.target.value); setValidationError('') }}
                         placeholder="Paste address here..."
                         disabled={busy}
-                        className="w-full bg-surface-container-highest/50 backdrop-blur-sm border border-border-subtle rounded text-primary-container font-code-sm font-medium px-4 py-3 pr-10 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all focus:shadow-[0_0_15px_rgba(0,255,194,0.15)] placeholder:text-text-muted/50"
+                        className="w-full bg-surface-container-highest/50 backdrop-blur-sm border border-border-subtle rounded text-primary-container font-code-sm font-medium px-3.5 py-2.5 pr-12 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all focus:shadow-[0_0_15px_rgba(0,255,194,0.15)] placeholder:text-text-muted/50 text-xs sm:text-sm truncate"
                       />
                       <button
                         type="button"
@@ -396,7 +410,7 @@ export default function App() {
             {/* ════════════════════════════════════════════════════════════════
                 CENTER COLUMN: Live Feed
             ════════════════════════════════════════════════════════════════ */}
-            <div className="col-span-1 md:col-span-6 flex flex-col h-full min-h-[600px] gap-6">
+            <div className="col-span-1 md:col-span-6 flex flex-col h-full gap-5">
               
               {/* Terminal Card */}
               <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl flex flex-col h-full overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] relative">
@@ -422,7 +436,7 @@ export default function App() {
                 {/* Terminal Body */}
                 <div
                   ref={terminalRef}
-                  className="flex-1 p-6 bg-surface-container-lowest/90 font-code-sm text-secondary overflow-y-auto relative max-h-[500px]"
+                  className="flex-1 p-6 bg-surface-container-lowest/90 font-code-sm text-secondary overflow-y-auto relative"
                   id="terminal-feed"
                 >
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(5,6,13,0)_50%,rgba(0,0,0,0.4)_50%),linear-gradient(90deg,rgba(0,255,194,0.02),rgba(0,0,0,0),rgba(20,209,255,0.02))] z-10 bg-[length:100%_4px,100%_100%] opacity-40" />
@@ -598,10 +612,10 @@ export default function App() {
             {/* ════════════════════════════════════════════════════════════════
                 RIGHT COLUMN: Insights
             ════════════════════════════════════════════════════════════════ */}
-            <div className="col-span-1 md:col-span-3 flex flex-col gap-6">
+            <div className="col-span-1 md:col-span-3 flex flex-col gap-5 min-w-0 overflow-hidden">
               
               {/* CONSENSUS ENGINE */}
-              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)] relative overflow-hidden">
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)] relative overflow-hidden">
                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary-container/10 rounded-full blur-3xl mix-blend-screen pointer-events-none" />
                 <h3 className="font-label-caps text-text-muted mb-4 flex items-center gap-2 font-bold tracking-widest">
                   <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
@@ -611,8 +625,8 @@ export default function App() {
                 </h3>
 
                 {/* Simulated Donut Chart using SVG */}
-                <div className="flex items-center justify-center py-4">
-                  <div className="relative w-40 h-40 flex items-center justify-center">
+                <div className="flex items-center justify-center py-3">
+                  <div className="relative w-36 h-36 flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90 drop-shadow-[0_0_15px_rgba(0,255,194,0.5)]" viewBox="0 0 100 100">
                       <defs>
                         <filter id="glow">
@@ -696,14 +710,14 @@ export default function App() {
               </div>
 
               {/* INTELLIGENCE SUMMARY */}
-              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)]">
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
                 <h3 className="font-label-caps text-text-muted mb-4 flex items-center gap-2 font-bold tracking-widest">
                   <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
                     summarize
                   </span>
                   INTELLIGENCE SUMMARY
                 </h3>
-                <p className="font-body-md text-on-surface-variant text-[14px] leading-relaxed">
+                <p className="font-body-md text-on-surface-variant text-[13px] leading-relaxed">
                   AI heuristic engines indicate{' '}
                   <span className="text-primary-container font-semibold drop-shadow-[0_0_2px_rgba(0,255,194,0.3)]">
                     {isMalicious ? 'high probability of attack vector' : 'low probability'}
@@ -719,7 +733,7 @@ export default function App() {
               </div>
 
               {/* SCAN HISTORY */}
-              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-0 shadow-[0_8px_32px_rgba(0,0,0,0.3)] shadow-[inset_0_0_30px_rgba(0,255,194,0.02)] overflow-hidden">
+              <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-0 shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden">
                 <div className="p-4 border-b border-border-subtle bg-surface-container-highest/30">
                   <h3 className="font-label-caps text-text-muted flex items-center gap-2 font-bold tracking-widest">
                     <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
@@ -745,9 +759,9 @@ export default function App() {
                         <div
                           key={idx}
                           onClick={() => setViewingScan(s)}
-                          className="flex items-center justify-between p-4 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer"
+                          className="flex items-center justify-between p-3 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer min-w-0"
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary shadow-[0_0_10px_rgba(166,230,255,0.15)] group-hover:shadow-[0_0_15px_rgba(166,230,255,0.3)] transition-all">
                               <span className="material-symbols-outlined text-[16px]">{iconName}</span>
                             </div>
@@ -756,7 +770,7 @@ export default function App() {
                               <span className="font-label-caps text-[9px] text-text-muted/80">{fmt(s.tokenAddress)}</span>
                             </div>
                           </div>
-                          <div className={`px-2 py-1 border rounded font-label-caps text-[10px] font-bold ${badgeClass}`}>
+                          <div className={`px-2 py-1 border rounded font-label-caps text-[10px] font-bold shrink-0 ${badgeClass}`}>
                             {s.verdict}
                           </div>
                         </div>
@@ -765,8 +779,8 @@ export default function App() {
                   ) : (
                     <>
                       {/* Row 1 */}
-                      <div className="flex items-center justify-between p-4 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between p-3 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary shadow-[0_0_10px_rgba(166,230,255,0.15)] group-hover:shadow-[0_0_15px_rgba(166,230,255,0.3)] transition-all">
                             <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(166,230,255,0.5)]">check</span>
                           </div>
@@ -775,14 +789,14 @@ export default function App() {
                             <span className="font-label-caps text-[9px] text-text-muted/80">2m ago</span>
                           </div>
                         </div>
-                        <div className="px-2 py-1 bg-secondary/10 border border-secondary/30 rounded font-label-caps text-[10px] text-secondary font-bold shadow-[0_0_5px_rgba(166,230,255,0.2)]">
+                        <div className="px-2 py-1 bg-secondary/10 border border-secondary/30 rounded font-label-caps text-[10px] text-secondary font-bold shrink-0 shadow-[0_0_5px_rgba(166,230,255,0.2)]">
                           SAFE
                         </div>
                       </div>
 
                       {/* Row 2 */}
-                      <div className="flex items-center justify-between p-4 border-b border-border-subtle/50 hover:bg-tertiary-fixed/5 transition-colors group cursor-pointer">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between p-3 border-b border-border-subtle/50 hover:bg-tertiary-fixed/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="w-8 h-8 rounded-full bg-tertiary-fixed/10 border border-tertiary-fixed/30 flex items-center justify-center text-tertiary-fixed shadow-[0_0_10px_rgba(255,226,83,0.15)] group-hover:shadow-[0_0_15px_rgba(255,226,83,0.3)] transition-all">
                             <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(255,226,83,0.5)]">warning</span>
                           </div>
@@ -791,14 +805,14 @@ export default function App() {
                             <span className="font-label-caps text-[9px] text-text-muted/80">14m ago</span>
                           </div>
                         </div>
-                        <div className="px-2 py-1 bg-tertiary-fixed/10 border border-tertiary-fixed/30 rounded font-label-caps text-[10px] text-tertiary-fixed font-bold shadow-[0_0_5px_rgba(255,226,83,0.2)]">
+                        <div className="px-2 py-1 bg-tertiary-fixed/10 border border-tertiary-fixed/30 rounded font-label-caps text-[10px] text-tertiary-fixed font-bold shrink-0 shadow-[0_0_5px_rgba(255,226,83,0.2)]">
                           WARN
                         </div>
                       </div>
 
                       {/* Row 3 */}
-                      <div className="flex items-center justify-between p-4 hover:bg-alert-critical/5 transition-colors group cursor-pointer">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between p-3 hover:bg-alert-critical/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="w-8 h-8 rounded-full bg-alert-critical/10 border border-alert-critical/30 flex items-center justify-center text-alert-critical shadow-[0_0_10px_rgba(255,62,62,0.15)] group-hover:shadow-[0_0_15px_rgba(255,62,62,0.3)] transition-all">
                             <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(255,62,62,0.5)]">block</span>
                           </div>
@@ -807,7 +821,7 @@ export default function App() {
                             <span className="font-label-caps text-[9px] text-text-muted/80">1h ago</span>
                           </div>
                         </div>
-                        <div className="px-2 py-1 bg-alert-critical/10 border border-alert-critical/30 rounded font-label-caps text-[10px] text-alert-critical font-bold shadow-[0_0_5px_rgba(255,62,62,0.2)]">
+                        <div className="px-2 py-1 bg-alert-critical/10 border border-alert-critical/30 rounded font-label-caps text-[10px] text-alert-critical font-bold shrink-0 shadow-[0_0_5px_rgba(255,62,62,0.2)]">
                           HONEYPOT
                         </div>
                       </div>
@@ -818,6 +832,17 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* ── FOOTER ── */}
+        <footer className="mt-auto pt-6 pb-4 text-center text-[11px] font-code-sm text-text-muted/60">
+          <div className="flex items-center justify-center gap-4">
+            <span>ScamShield AI • GenLayer Intelligent Contracts</span>
+            <span className="text-border-subtle">|</span>
+            <a href="https://studio.genlayer.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary-container transition-colors">GenLayer Studio</a>
+            <span className="text-border-subtle">|</span>
+            <a href="https://github.com/YousufAziz1/scamshield" target="_blank" rel="noopener noreferrer" className="hover:text-primary-container transition-colors">GitHub</a>
+          </div>
+        </footer>
       </main>
     </div>
   )
