@@ -95,11 +95,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-mesh-canvas text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="min-h-screen w-full bg-mesh-canvas text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
       
       {/* ── TOP LUXURY NAVIGATION BAR ── */}
-      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 sm:px-6 lg:px-8 py-3.5">
-        <div className="w-full max-w-[1720px] mx-auto flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 sm:px-6 lg:px-8 py-3.5 flex justify-center">
+        <div className="w-full max-w-[1720px] flex items-center justify-between gap-4">
           {/* Brand identity */}
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9 rounded-xl overflow-hidden border border-cyan-500/30 p-0.5 bg-slate-900 shadow-[0_0_16px_rgba(0,242,254,0.25)] flex-shrink-0">
@@ -510,8 +510,8 @@ export default function App() {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-auto text-xs font-mono text-slate-500">
-        <div className="w-full max-w-[1720px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+      <footer className="w-full border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-auto text-xs font-mono text-slate-500 flex justify-center">
+        <div className="w-full max-w-[1720px] flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div>
             ScamShield AI • Powered by GenLayer Intelligent Contracts & Decentralized Validators
           </div>
