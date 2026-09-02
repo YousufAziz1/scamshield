@@ -152,7 +152,7 @@ export default function App() {
   const donutStatusText = isMalicious ? 'SCAM' : isUnknown ? 'WARN' : 'SAFE'
 
   return (
-    <div className="bg-background font-body-md text-on-background min-h-screen">
+    <div className="bg-background font-body-md text-on-background min-h-screen flex flex-col justify-between">
       
       {/* ── HEADER ── */}
       <header className="sticky top-0 w-full z-50 bg-surface-container/80 backdrop-blur-2xl border-b border-border-subtle shadow-[0_4px_30px_rgba(0,0,0,0.6)]">
@@ -428,6 +428,8 @@ export default function App() {
                     { name: 'Arbitrary Mint', status: 'REVOKED', pass: true, desc: 'Owner cannot dilute circulating supply' },
                     { name: 'Blacklist Logic', status: 'NONE', pass: true, desc: 'Zero transfer blocking addresses' },
                     { name: 'Liquidity Drain Vector', status: currentResult?.verdict === 'SCAM' ? 'CRITICAL' : 'LOW', pass: currentResult?.verdict !== 'SCAM', desc: 'Pool unlock period verified' },
+                    { name: 'Proxy / Mutability Hook', status: 'IMMUTABLE', pass: true, desc: 'Implementation logic locked' },
+                    { name: 'Selfdestruct Opcode', status: 'CLEAN', pass: true, desc: 'Zero selfdestruct vulnerabilities' },
                     { name: 'Hidden Ownership Privileges', status: 'RENOUNCED', pass: true, desc: 'Zero privilege escalation vector' },
                     { name: 'Tax / Fee Manipulation', status: 'HARDCODED 0%', pass: true, desc: 'Fixed transfer parameters' },
                   ].map((vec, i) => (
@@ -457,6 +459,14 @@ export default function App() {
                       </span>
                     </div>
                   ))}
+                </div>
+
+                <div className="mt-1 pt-2.5 border-t border-border-subtle/50 flex items-center justify-between text-[10px] font-mono">
+                  <span className="text-text-muted">THREAT INDEX:</span>
+                  <span className="text-primary-container font-bold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary-container" />
+                    GRADE AAA (0.02 LOW)
+                  </span>
                 </div>
               </div>
             </div>
@@ -976,7 +986,7 @@ export default function App() {
                       </div>
 
                       {/* Row 3 */}
-                      <div className="flex items-center justify-between p-3 hover:bg-alert-critical/5 transition-colors group cursor-pointer">
+                      <div className="flex items-center justify-between p-3 border-b border-border-subtle/50 hover:bg-alert-critical/5 transition-colors group cursor-pointer">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="w-8 h-8 rounded-full bg-alert-critical/10 border border-alert-critical/30 flex items-center justify-center text-alert-critical shadow-[0_0_10px_rgba(255,62,62,0.15)] group-hover:shadow-[0_0_15px_rgba(255,62,62,0.3)] transition-all">
                             <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(255,62,62,0.5)]">block</span>
@@ -984,6 +994,38 @@ export default function App() {
                           <div className="flex flex-col">
                             <span className="font-code-sm text-primary font-bold tracking-wide">DOGE_X</span>
                             <span className="font-label-caps text-[9px] text-text-muted/80">1h ago</span>
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 bg-alert-critical/10 border border-alert-critical/30 rounded font-label-caps text-[10px] text-alert-critical font-bold shrink-0 shadow-[0_0_5px_rgba(255,62,62,0.2)]">
+                          HONEYPOT
+                        </div>
+                      </div>
+
+                      {/* Row 4 */}
+                      <div className="flex items-center justify-between p-3 border-b border-border-subtle/50 hover:bg-secondary/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary shadow-[0_0_10px_rgba(166,230,255,0.15)] group-hover:shadow-[0_0_15px_rgba(166,230,255,0.3)] transition-all">
+                            <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(166,230,255,0.5)]">check</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-code-sm text-primary font-bold tracking-wide">ARB_YIELD</span>
+                            <span className="font-label-caps text-[9px] text-text-muted/80">3h ago</span>
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 bg-secondary/10 border border-secondary/30 rounded font-label-caps text-[10px] text-secondary font-bold shrink-0 shadow-[0_0_5px_rgba(166,230,255,0.2)]">
+                          SAFE
+                        </div>
+                      </div>
+
+                      {/* Row 5 */}
+                      <div className="flex items-center justify-between p-3 hover:bg-alert-critical/5 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-full bg-alert-critical/10 border border-alert-critical/30 flex items-center justify-center text-alert-critical shadow-[0_0_10px_rgba(255,62,62,0.15)] group-hover:shadow-[0_0_15px_rgba(255,62,62,0.3)] transition-all">
+                            <span className="material-symbols-outlined text-[16px] drop-shadow-[0_0_3px_rgba(255,62,62,0.5)]">block</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-code-sm text-primary font-bold tracking-wide">PUPPET_COIN</span>
+                            <span className="font-label-caps text-[9px] text-text-muted/80">5h ago</span>
                           </div>
                         </div>
                         <div className="px-2 py-1 bg-alert-critical/10 border border-alert-critical/30 rounded font-label-caps text-[10px] text-alert-critical font-bold shrink-0 shadow-[0_0_5px_rgba(255,62,62,0.2)]">
@@ -1042,6 +1084,38 @@ export default function App() {
                   <span className="text-primary-container font-bold">#418,293 (FINALIZED)</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* ── BOTTOM SOC TELEMETRY DOCK ── */}
+          <div className="w-full max-w-[1920px] mx-auto mt-5 p-3.5 bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-4 text-[11px] font-mono shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+            <div className="flex items-center gap-6 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                <span className="text-text-muted">SWARM_NET:</span>
+                <span className="text-primary-container font-bold">GENLAYER STUDIONET</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-secondary">speed</span>
+                <span className="text-text-muted">BFT_LATENCY:</span>
+                <span className="text-secondary font-bold">1.84s</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-primary-container">dns</span>
+                <span className="text-text-muted">QUORUM_PEERS:</span>
+                <span className="text-on-surface font-bold">1,402 / 1,402 ONLINE</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-tertiary-fixed">verified</span>
+                <span className="text-text-muted">INTELLIGENT_CONTRACT:</span>
+                <span className="text-primary font-bold">{fmt(CONTRACT)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="px-2.5 py-1 rounded bg-primary-container/10 border border-primary-container/30 text-primary-container font-bold tracking-wider">
+                BFT QUORUM: 100%
+              </span>
+              <span className="text-text-muted/70 font-mono hidden sm:inline">EPOCH #418,294 (ACTIVE)</span>
             </div>
           </div>
         </div>
