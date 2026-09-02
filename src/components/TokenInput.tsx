@@ -101,7 +101,7 @@ export function TokenInput({ onScan, status, onReset }: TokenInputProps) {
           <label className="font-mono text-[10px] font-bold tracking-wider uppercase text-slate-400 block mb-2">
             Target Blockchain Network
           </label>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {CHAINS.map(c => {
               const active = selectedChain === c.id
               return (
@@ -110,14 +110,14 @@ export function TokenInput({ onScan, status, onReset }: TokenInputProps) {
                   type="button"
                   onClick={() => setSelectedChain(c.id)}
                   disabled={busy}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-medium transition-all text-left flex items-center justify-between border cursor-pointer ${
+                  className={`px-3 py-2 rounded-xl text-xs font-mono font-medium transition-all text-left flex items-center justify-between border cursor-pointer ${
                     active
                       ? 'bg-cyan-500/15 border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(0,242,254,0.18)]'
-                      : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                      : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-200 hover:bg-slate-900/70'
                   }`}
                 >
                   <span className="truncate">{c.label}</span>
-                  <span className={`text-[8px] font-bold px-1 rounded ${c.color}`}>{c.badge}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${c.color}`}>{c.badge}</span>
                 </button>
               )
             })}
@@ -212,21 +212,21 @@ export function TokenInput({ onScan, status, onReset }: TokenInputProps) {
           </span>
           <span className="text-[9px] font-mono text-slate-600">1-Click Test</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
           {QUICK_TARGETS.map((t, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => selectQuickTarget(t.addr, t.chainId)}
               disabled={busy}
-              className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/50 text-left transition-all cursor-pointer group"
+              className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/50 text-left transition-all cursor-pointer group"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-bold text-slate-200 group-hover:text-cyan-300">
+                <span className="text-xs font-mono font-bold text-slate-200 group-hover:text-cyan-300">
                   {t.name}
                 </span>
-                <span className={`text-[8px] font-mono font-bold px-1 rounded ${
-                  t.safe ? 'text-emerald-400 bg-emerald-950/40' : 'text-rose-400 bg-rose-950/40'
+                <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                  t.safe ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-800/40' : 'text-rose-400 bg-rose-950/40 border border-rose-800/40'
                 }`}>
                   {t.chain}
                 </span>

@@ -168,10 +168,10 @@ export default function App() {
       </AnimatePresence>
 
       {/* ── MAIN RESPONSIVE SECURITY CANVAS ── */}
-      <main className="flex-1 w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="flex-1 w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 dashboard-grid">
         
-        {/* ── LEFT PANEL: SEARCH CONSOLE & SESSION LOGS (Col 1-4) ── */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
+        {/* ── LEFT PANEL: SEARCH CONSOLE & SESSION LOGS ── */}
+        <div className="flex flex-col gap-6 w-full">
           {/* Main Input Card */}
           <div className="glass-card shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
             <TokenInput
@@ -239,8 +239,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* ── CENTER PANEL: SCAN DOSSIER & CONSENSUS RESULTS (Col 5-8) ── */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
+        {/* ── CENTER PANEL: SCAN DOSSIER & CONSENSUS RESULTS ── */}
+        <div className="flex flex-col gap-6 w-full">
           {/* Case 1: Scanning in Progress */}
           {busy && (
             <div className="glass-card p-8 text-center flex flex-col items-center justify-center min-h-[380px]">
@@ -367,43 +367,78 @@ export default function App() {
             </div>
           )}
 
-          {/* Case 3: Idle / Standby Screen */}
+          {/* Case 3: Idle / Standby Screen (Command Center Hero) */}
           {!busy && !currentResult && (
-            <div className="glass-card p-8 text-center flex flex-col items-center justify-center min-h-[380px]">
-              <div className="relative w-20 h-20 mb-5 flex items-center justify-center">
-                <div className="absolute inset-0 rounded-full border border-cyan-500/20 animate-spin-slow" />
-                <div className="w-16 h-16 rounded-full bg-cyan-500/5 border border-cyan-500/20 flex items-center justify-center">
-                  <Shield className="w-8 h-8 text-cyan-400/70" />
+            <div className="glass-card p-6 sm:p-8 flex flex-col items-center justify-between min-h-[560px] text-center">
+              <div className="flex flex-col items-center w-full max-w-lg">
+                <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border border-cyan-500/20 animate-spin-slow" />
+                  <div className="absolute inset-2 rounded-full border border-dashed border-cyan-400/40 animate-pulse-glow" />
+                  <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center shadow-[0_0_24px_rgba(0,242,254,0.2)]">
+                    <Shield className="w-8 h-8 text-cyan-300" />
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-widest text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 mb-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                  SYSTEM STANDBY • READY FOR ANALYSIS
+                </div>
+
+                <h3 className="font-display font-black text-2xl text-white mb-2 tracking-wide">
+                  Decentralized Threat Intelligence
+                </h3>
+                <p className="text-xs text-slate-400 font-sans leading-relaxed mb-6">
+                  Broadcast any smart contract address on Ethereum, BSC, Solana, or Layer-2s to trigger decentralized multi-agent Byzantine consensus directly across GenLayer validator nodes.
+                </p>
+              </div>
+
+              {/* 3 Core Architecture Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left font-sans">
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all">
+                  <div className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                    Byzantine AI
+                  </div>
+                  <div className="text-xs font-bold text-white mb-1">5-Node BFT Committee</div>
+                  <div className="text-[10px] text-slate-400 leading-normal">Independent validator nodes evaluate AST bytecode without centralized oracle risk.</div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all">
+                  <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Chain-Bounded
+                  </div>
+                  <div className="text-xs font-bold text-white mb-1">Strict Evidence Filter</div>
+                  <div className="text-[10px] text-slate-400 leading-normal">Rejects out-of-chain token data. Never substitutes cross-chain metadata or phantom pairs.</div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all">
+                  <div className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                    Equivalence Principle
+                  </div>
+                  <div className="text-xs font-bold text-white mb-1">Material Field Agreement</div>
+                  <div className="text-[10px] text-slate-400 leading-normal">Validators must agree on token identity, verdict, risk bracket, and core threat drivers.</div>
                 </div>
               </div>
 
-              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400 bg-slate-900/60 border border-slate-800 mb-3">
-                SYSTEM STANDBY • READY FOR ANALYSIS
-              </span>
-
-              <h3 className="font-display font-bold text-xl text-white mb-2">
-                Decentralized Threat Detection
-              </h3>
-              <p className="text-xs text-slate-400 font-sans max-w-md leading-relaxed mb-6">
-                Enter any smart contract address on the left console to trigger decentralized AI consensus directly across GenLayer validator nodes.
-              </p>
-
-              <div className="grid grid-cols-2 gap-3 max-w-sm w-full text-left font-mono text-[10px]">
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                  <div className="text-slate-500 uppercase font-bold">Intelligent Contract</div>
-                  <div className="text-white font-semibold mt-0.5 truncate">{fmt(CONTRACT)}</div>
+              {/* Status Bar */}
+              <div className="w-full mt-6 pt-4 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] font-mono">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <span className="text-slate-500">Intelligent Contract:</span>
+                  <span className="font-bold text-slate-200">{fmt(CONTRACT)}</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                  <div className="text-slate-500 uppercase font-bold">Byzantine Engine</div>
-                  <div className="text-emerald-400 font-semibold mt-0.5">Online & Active</div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="text-emerald-400 font-bold">GenLayer Studio Net Verified</span>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── RIGHT PANEL: CONSENSUS ENGINE PIPELINE & ARCHITECTURE (Col 9-12) ── */}
-        <div className="lg:col-span-3 flex flex-col gap-6">
+        {/* ── RIGHT PANEL: CONSENSUS ENGINE PIPELINE & ARCHITECTURE ── */}
+        <div className="flex flex-col gap-6 w-full">
           <div className="glass-card p-5">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
