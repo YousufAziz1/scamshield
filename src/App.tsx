@@ -1,342 +1,360 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Shield, AlertCircle, X, Cpu, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react'
+import { Shield, AlertCircle, Cpu, Activity, Database, CheckCircle2 } from 'lucide-react'
 import { useGenLayer } from '@/hooks/useGenLayer'
 import { CONTRACT } from '@/lib/genlayer'
 import { useWallet } from '@/hooks/useWallet'
 import { TokenInput } from '@/components/TokenInput'
 import { VerdictCard } from '@/components/VerdictCard'
 import { RiskFlags } from '@/components/RiskFlags'
-import { ConsensusProgress } from '@/components/ConsensusProgress'
 import { WalletConnect } from '@/components/WalletConnect'
 import type { ScanResult } from '@/types'
 
-const fmt = (addr: string) => !addr ? '' : addr.length <= 13 ? addr : `${addr.slice(0,6)}...${addr.slice(-4)}`
+const fmt = (addr: string) => !addr ? '' : addr.length <= 13 ? addr : `${addr.slice(0, 6)}...${addr.slice(-4)}`
 
-function getChainBadge(chain: string) {
-  const c = chain.toUpperCase()
-  if (c==='SOL') return 'bg-purple-950/80 text-purple-400 border border-purple-800/30'
-  if (c==='ETH') return 'bg-blue-950/80 text-blue-400 border border-blue-800/30'
-  if (c==='BSC') return 'bg-amber-950/80 text-amber-400 border border-amber-800/30'
-  return 'bg-slate-900/80 text-slate-400 border border-slate-700/30'
-}
+const CONSENSUS_PIPELINE = [
+  { stage: '01', name: 'Mempool & Ingestion', desc: 'Non-deterministic web intake', key: 'pending' },
+  { stage: '02', name: 'Leader Proposal',     desc: 'Deterministic AST bytecode execution', key: 'proposing' },
+  { stage: '03', name: 'Commit Phase',        desc: 'Cryptographic hash commitment', key: 'committing' },
+  { stage: '04', name: 'Vote Revelation',     desc: 'Byzantine majority agreement', key: 'revealing' },
+  { stage: '05', name: 'Finalization',        desc: 'Contract state commit & verification', key: 'accepted' },
+] as const
 
 export default function App() {
-  const { scanState, scanToken, reset, progressPercent, connectionError, isStudioMode } = useGenLayer()
+  const { scanState, scanToken, reset, connectionError } = useGenLayer()
   const { wallet, connect, disconnect } = useWallet()
+
   const [recentScans, setRecentScans] = useState<ScanResult[]>([])
   const [viewingScan, setViewingScan] = useState<ScanResult | null>(null)
+  const [copiedAddr, setCopiedAddr] = useState(false)
+  const lastFinalizedRef = useRef<string | null>(null)
+
+  // Accumulate scans in session history
+  useEffect(() => {
+    if (scanState.status === 'finalized' && scanState.result) {
+      const res = scanState.result
+      if (lastFinalizedRef.current !== res.tokenAddress) {
+        lastFinalizedRef.current = res.tokenAddress
+        setRecentScans(prev => [res, ...prev.filter(x => x.tokenAddress.toLowerCase() !== res.tokenAddress.toLowerCase())])
+      }
+    }
+  }, [scanState.status, scanState.result])
 
   const currentResult = viewingScan ?? scanState.result
-  const isScanning = ['submitting','pending','proposing','committing','revealing'].includes(scanState.status)
-  const busy = isScanning || scanState.status === 'accepted'
-  const isMalicious = !!(currentResult && (currentResult.verdict==='SCAM'||currentResult.verdict==='RISKY'))
+  const busy = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'accepted'].includes(scanState.status)
 
-  const lastProcessedTxRef = useRef<string | null>(null)
+  const riskyScans = recentScans.filter(s => s.verdict === 'SCAM' || s.verdict === 'RISKY')
 
-  useEffect(() => {
-    const res = scanState.result
-    if (res && res.txHash && lastProcessedTxRef.current !== res.txHash) {
-      lastProcessedTxRef.current = res.txHash
-      setRecentScans(prev => [res, ...prev.filter(s => s.txHash !== res.txHash).slice(0, 9)])
+  // Trigger real scan with wallet connection
+  async function handleScan(tokenAddress: string, chainId: string) {
+    if (busy) return
+    setViewingScan(null)
+
+    if (!wallet.address) {
+      try {
+        await connect()
+      } catch (e) {
+        console.error('Connection request failed:', e)
+        return
+      }
     }
-  }, [scanState.result])
 
-  async function handleScan(addr: string, chain: string) {
-    let activeAddr = wallet.address
-    if (!activeAddr) {
-      activeAddr = await connect()
-      if (!activeAddr) return
-    }
-    await scanToken(addr, chain, activeAddr)
+    const currentWallet = wallet.address || ((window.ethereum as unknown as { selectedAddress?: string })?.selectedAddress) || ''
+    await scanToken(tokenAddress, chainId, currentWallet)
   }
 
-  const riskyScans = recentScans.filter(s => s.verdict==='SCAM'||s.verdict==='RISKY').slice(0,5)
-  const safeScans  = recentScans.filter(s => s.verdict==='SAFE'||s.verdict==='UNKNOWN').slice(0,5)
-
-  const accentVar = isMalicious ? 'var(--accent-red)' : 'var(--accent-cyan)'
-
+  // Active status badge
   const currentUiState = !wallet.address
     ? 'CONNECT WALLET'
-    : scanState.status === 'error'
-    ? 'ERROR'
+    : scanState.status === 'idle'
+    ? 'READY'
+    : scanState.status === 'submitting'
+    ? 'SUBMITTING'
+    : scanState.status === 'pending'
+    ? 'PENDING'
+    : scanState.status === 'proposing'
+    ? 'PROPOSING'
+    : scanState.status === 'committing'
+    ? 'COMMITTING'
+    : scanState.status === 'revealing'
+    ? 'REVEALING'
+    : scanState.status === 'accepted'
+    ? 'ACCEPTED'
     : scanState.status === 'finalized'
     ? 'VERIFIED'
-    : busy
-    ? scanState.status.toUpperCase()
-    : 'READY'
+    : 'ERROR'
+
+  const copyContractAddr = async () => {
+    try {
+      await navigator.clipboard.writeText(CONTRACT)
+      setCopiedAddr(true)
+      setTimeout(() => setCopiedAddr(false), 2000)
+    } catch {
+      // ignore
+    }
+  }
 
   return (
-    <div className="app-shell">
-      <div className="monitor-outer">
-        <div className="monitor-screen" style={{'--accent': accentVar} as React.CSSProperties}>
-          <div className="absolute inset-0 bg-cyber-grid z-0" />
-          <div className="scanlines" />
-          <div className="monitor-reflection" />
-
-          {/* ── HEADER ── */}
-          <header className="header-strip">
-            <div className="flex items-center gap-3 min-w-0">
-              <img src="/logo.jpg" alt="ScamShield Logo" className="w-8 h-8 rounded-full border border-cyan-500/40 object-cover flex-shrink-0 animate-bounce-in" style={{boxShadow:'0 0 12px rgba(0,255,204,0.25)'}} />
-              <h1 className="font-display font-black text-xs tracking-widest text-white flex items-center gap-2">
+    <div className="min-h-screen bg-mesh-canvas text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      
+      {/* ── TOP LUXURY NAVIGATION BAR ── */}
+      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/75 backdrop-blur-xl px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        {/* Brand identity */}
+        <div className="flex items-center gap-3">
+          <div className="relative w-9 h-9 rounded-xl overflow-hidden border border-cyan-500/30 p-0.5 bg-slate-900 shadow-[0_0_16px_rgba(0,242,254,0.25)] flex-shrink-0">
+            <img src="/logo.jpg" alt="ScamShield Logo" className="w-full h-full object-cover rounded-lg" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-display font-black text-sm tracking-wider text-white">
                 SCAM<span className="text-cyan-400">SHIELD</span>
-                <span className="text-[8px] font-mono font-bold px-1 rounded bg-cyan-400 text-black">AI</span>
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider ${
-                  currentUiState === 'VERIFIED' || currentUiState === 'READY'
-                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                    : currentUiState === 'ERROR'
-                    ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-                    : 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400'
-                }`}>
-                  <span className={`w-1 h-1 rounded-full ${
-                    currentUiState === 'VERIFIED' || currentUiState === 'READY'
-                      ? 'bg-emerald-400 animate-pulse'
-                      : currentUiState === 'ERROR'
-                      ? 'bg-rose-400'
-                      : 'bg-cyan-400 animate-pulse'
-                  }`} />
-                  {currentUiState}
-                </span>
-              </h1>
+              </span>
+              <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
+                AI
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-slate-300">
+                <span className={`w-1.5 h-1.5 rounded-full ${busy ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400'}`} />
+                {currentUiState}
+              </span>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <div className="hidden md:flex items-center gap-3">
-                {[
-                  { val: 'Studio (61999)', lbl: 'GenLayer Network' },
-                  { val: 'BFT Consensus', lbl: 'Protocol' },
-                  { val: String(recentScans.length), lbl: 'Session Scans' },
-                  { val: String(riskyScans.length), lbl: 'Threats Flagged' },
-                ].map((s,i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    {i>0 && <div className="stat-divider" />}
-                    <div className="text-right">
-                      <div className="text-white font-mono font-bold text-xs leading-none">{s.val}</div>
-                      <div className="text-slate-500 font-mono text-[8px] uppercase mt-0.5">{s.lbl}</div>
-                    </div>
-                  </div>
-                ))}
+            <p className="text-[10px] font-mono text-slate-500 hidden sm:block">
+              GenLayer Intelligent Contract Security Oracle
+            </p>
+          </div>
+        </div>
+
+        {/* Real Network Telemetry & Wallet Header Controls */}
+        <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-4 text-xs font-mono border-r border-slate-800 pr-4">
+            <div>
+              <div className="text-[9px] text-slate-500 uppercase font-bold">Network</div>
+              <div className="text-slate-200 font-semibold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                Studionet (61999)
               </div>
-              <div className="stat-divider hidden md:block" />
-              <WalletConnect wallet={wallet} onConnect={connect} onDisconnect={disconnect} />
             </div>
-          </header>
+            <div>
+              <div className="text-[9px] text-slate-500 uppercase font-bold">Consensus</div>
+              <div className="text-slate-200 font-semibold">BFT Multi-Agent</div>
+            </div>
+            <div>
+              <div className="text-[9px] text-slate-500 uppercase font-bold">Session History</div>
+              <div className="text-slate-200 font-semibold">{recentScans.length} Scanned • {riskyScans.length} Flagged</div>
+            </div>
+          </div>
 
-          {/* ── 3-PANEL GRID ── */}
-          <main className="panel-grid relative z-10">
+          <WalletConnect wallet={wallet} onConnect={connect} onDisconnect={disconnect} />
+        </div>
+      </header>
 
-            {/* PANEL LEFT */}
-            <div className="panel-left">
-              <div style={{borderBottom:'1px solid var(--border-subtle)'}}>
-                <TokenInput onScan={handleScan} status={scanState.status} onReset={() => { reset(); setViewingScan(null) }} />
+      {/* ── ERROR NOTIFICATION BANNER ── */}
+      <AnimatePresence>
+        {(scanState.error || connectionError) && (
+          <div className="bg-rose-950/80 border-b border-rose-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-rose-300 font-mono">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>{scanState.error || connectionError}</span>
+            </div>
+            <button
+              onClick={() => reset()}
+              className="text-[10px] uppercase font-bold text-rose-400 hover:text-rose-200 p-1 cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MAIN RESPONSIVE SECURITY CANVAS ── */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* ── LEFT PANEL: SEARCH CONSOLE & SESSION LOGS (Col 1-4) ── */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          {/* Main Input Card */}
+          <div className="glass-card shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+            <TokenInput
+              onScan={handleScan}
+              status={scanState.status}
+              onReset={() => { reset(); setViewingScan(null) }}
+            />
+          </div>
+
+          {/* Session Scan History Card */}
+          <div className="glass-card p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-cyan-400" />
+                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
+                  Session Scans ({recentScans.length})
+                </h3>
               </div>
+              <span className="text-[9px] font-mono text-slate-500 uppercase">Local Cache</span>
+            </div>
 
-              <div className="panel-left-scroll">
-                {/* Recent Threat Logs */}
-                <div>
-                  <h3 className="font-display font-bold text-[9px] uppercase tracking-wider flex items-center gap-1.5 mb-2 text-rose-500">
-                    <ShieldAlert className="w-3 h-3" /> Recent Logs ({riskyScans.length})
-                  </h3>
-                  {riskyScans.length === 0 ? (
-                    <div className="text-[9px] text-slate-600 font-mono italic p-2 border border-dashed border-slate-900/60 rounded">No threat logs yet.</div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {riskyScans.map(s => (
-                        <div key={s.txHash} onClick={() => setViewingScan(s)} className="cyber-card p-2 cursor-pointer hover:border-rose-500/50 transition-all text-[9px] font-mono border-rose-500/20 bg-rose-950/10">
-                          <div className="flex items-center justify-between text-slate-400 mb-1">
-                            <span className="font-bold text-white truncate max-w-[90px]">{s.realTokenData?.symbol ?? fmt(s.tokenAddress)}</span>
-                            <span className={`px-1 rounded text-[7px] font-bold ${getChainBadge(s.chainId)}`}>{s.chainId.toUpperCase()}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-rose-400 font-bold">{s.verdict}</span>
-                            <span className="text-rose-400/70">{s.riskScore}/100</span>
-                          </div>
+            {recentScans.length === 0 ? (
+              <div className="py-6 text-center text-xs font-mono text-slate-500 border border-dashed border-slate-800/80 rounded-xl bg-slate-950/40">
+                No session scans yet. Run a contract analysis above.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                {recentScans.map((s, idx) => {
+                  const bad = s.verdict === 'SCAM' || s.verdict === 'RISKY'
+                  const unk = s.verdict === 'UNKNOWN'
+                  const badgeColor = bad ? 'text-rose-400 bg-rose-950/40 border-rose-500/30' : unk ? 'text-amber-400 bg-amber-950/40 border-amber-500/30' : 'text-emerald-400 bg-emerald-950/40 border-emerald-500/30'
+                  const active = currentResult?.tokenAddress.toLowerCase() === s.tokenAddress.toLowerCase()
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setViewingScan(s)}
+                      className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        active
+                          ? 'bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_16px_rgba(0,242,254,0.1)]'
+                          : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-display font-bold text-xs text-white truncate">
+                            {s.realTokenData?.name || s.tokenIdentity?.name || 'Unknown Asset'}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            ({s.realTokenData?.symbol || s.tokenIdentity?.symbol || '?'})
+                          </span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Safe Verified Logs */}
-                <div>
-                  <h3 className="font-display font-bold text-[9px] uppercase tracking-wider flex items-center gap-1.5 mb-2 text-cyan-400">
-                    <Shield className="w-3 h-3" /> Verified Logs ({safeScans.length})
-                  </h3>
-                  {safeScans.length === 0 ? (
-                    <div className="text-[9px] text-slate-600 font-mono italic p-2 border border-dashed border-slate-900/60 rounded">No verified logs yet.</div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {safeScans.map(s => (
-                        <div key={s.txHash} onClick={() => setViewingScan(s)} className="cyber-card p-2 cursor-pointer hover:border-cyan-500/50 transition-all text-[9px] font-mono border-cyan-500/20 bg-cyan-950/10">
-                          <div className="flex items-center justify-between text-slate-400 mb-1">
-                            <span className="font-bold text-white truncate max-w-[90px]">{s.realTokenData?.symbol ?? fmt(s.tokenAddress)}</span>
-                            <span className={`px-1 rounded text-[7px] font-bold ${getChainBadge(s.chainId)}`}>{s.chainId.toUpperCase()}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className={s.verdict==='SAFE' ? "text-cyan-400 font-bold" : "text-amber-400 font-bold"}>{s.verdict}</span>
-                            <span className={s.verdict==='SAFE' ? "text-cyan-400/70" : "text-amber-400/70"}>{s.riskScore}/100</span>
-                          </div>
+                        <div className="text-[10px] font-mono text-slate-500 truncate mt-0.5">
+                          {fmt(s.tokenAddress)} • {s.chainId.toUpperCase()}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                      </div>
+                      <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border uppercase flex-shrink-0 ${badgeColor}`}>
+                        {s.verdict}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── CENTER PANEL: SCAN DOSSIER & CONSENSUS RESULTS (Col 5-8) ── */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          {/* Case 1: Scanning in Progress */}
+          {busy && (
+            <div className="glass-card p-8 text-center flex flex-col items-center justify-center min-h-[380px]">
+              <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 animate-ping" />
+                <div className="absolute inset-2 rounded-full border-2 border-dashed border-cyan-400 animate-spin-slow" />
+                <Cpu className="w-10 h-10 text-cyan-400 animate-pulse" />
               </div>
 
-              {/* System Debug accordion pinned at bottom */}
-              <div style={{borderTop:'1px solid var(--border-subtle)', background:'#020d0d', flexShrink:0}}>
-                <details className="debug-accordion group">
-                  <summary className="p-3 flex items-center justify-between font-display font-bold text-[9px] uppercase tracking-wider text-cyan-400">
-                    <span className="flex items-center gap-1.5"><Cpu className="w-3 h-3" /> System Debug</span>
-                    <ChevronDown className="w-3 h-3 text-slate-500 group-open:hidden" />
-                    <ChevronUp className="w-3 h-3 text-slate-500 hidden group-open:block" />
-                  </summary>
-                  <div className="px-3 pb-3 font-mono text-[9px] space-y-1 text-slate-400">
-                    {[
-                      ['CONTRACT', fmt(CONTRACT)],
-                      ['TX HASH', scanState.txHash ? fmt(scanState.txHash) : 'NULL'],
-                      ['NETWORK', isStudioMode ? 'studionet' : 'testnetBradbury'],
-                      ['STATUS', scanState.status.toUpperCase()],
-                    ].map(([k,v]) => (
-                      <div key={k} className="flex justify-between gap-2">
-                        <span className="text-slate-500">{k}:</span>
-                        <span className="text-white truncate max-w-[140px]">{v}</span>
-                      </div>
-                    ))}
-                    {connectionError && (
-                      <div className="mt-1 text-[8px] text-red-400 border-t border-red-500/10 pt-1 break-words">
-                        <span className="font-bold">ERROR:</span> {connectionError}
-                      </div>
-                    )}
-                  </div>
-                </details>
-              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-widest text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 mb-3 animate-pulse">
+                VALIDATORS EXECUTING CONSENSUS
+              </span>
+
+              <h3 className="font-display font-bold text-lg text-white mb-2">
+                Analyzing Intelligent Contract Code
+              </h3>
+              <p className="text-xs text-slate-400 font-sans max-w-sm mb-4">
+                GenLayer validator nodes are non-deterministically retrieving external provider security evidence and achieving Byzantine agreement.
+              </p>
+
+              {scanState.txHash && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-400">
+                  <span>Tx:</span>
+                  <span className="text-cyan-400 font-bold">{fmt(scanState.txHash)}</span>
+                </div>
+              )}
             </div>
+          )}
 
-            {/* PANEL CENTER */}
-            <div className="panel-center">
+          {/* Case 2: Finalized Result Dossier */}
+          {currentResult && !busy && (
+            <div className="flex flex-col gap-6">
+              {/* Verdict Card */}
+              <VerdictCard result={currentResult} />
 
-              {/* Wallet banner */}
-              {!wallet.address && (
-                <div className="cyber-card p-3 flex items-center justify-between animate-in" style={{borderColor:'rgba(0,255,204,0.2)',background:'rgba(0,255,204,0.04)'}}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <AlertCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                    <span className="font-mono text-[9px] font-bold tracking-wider text-cyan-400 truncate">Wallet signature required for consensus submissions</span>
-                  </div>
-                  <button onClick={connect} className="btn-cyber px-4 py-1.5 text-[9px] font-bold flex-shrink-0" style={{border:'1px solid var(--accent-cyan)',color:'var(--accent-cyan)',background:'transparent'}}>Connect</button>
-                </div>
-              )}
-
-              {/* Error banner */}
-              {(scanState.status === 'error' || wallet.error) && (
-                <div className="cyber-card p-3 border-red-500/30 bg-red-500/5 text-red-400 flex items-center justify-between animate-in">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <X className="w-4 h-4 flex-shrink-0" />
-                    <span className="font-mono text-[9px] truncate">{scanState.error || wallet.error}</span>
-                  </div>
-                  <button onClick={() => { reset(); disconnect() }} className="btn-cyber border border-red-500 text-red-400 px-4 py-1.5 text-[9px] flex-shrink-0">Dismiss</button>
-                </div>
-              )}
-
-              {/* Progress */}
-              <AnimatePresence>
-                {isScanning && <ConsensusProgress status={scanState.status} validatorVotes={scanState.result?.validatorVotes} progressPercent={progressPercent} />}
-              </AnimatePresence>
-
-              {/* Loading card */}
-              {busy && (
-                <div className="relative overflow-hidden rounded-xl border border-cyan-500/20 pulse-border" style={{background:'#031010',padding:'28px 20px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,minHeight:150}}>
-                  <div className="scanner-line" style={{background:'linear-gradient(90deg,transparent,var(--accent-cyan),transparent)'}} />
-                  <div className="relative w-11 h-11 flex items-center justify-center">
-                    <div className="absolute inset-0 rounded-full border-2 border-dashed border-cyan-400/20 animate-spin" style={{animationDuration:'6s'}} />
-                    <div className="absolute inset-2 rounded-full border border-cyan-400/40 animate-spin" style={{animationDuration:'3s',animationDirection:'reverse'}} />
-                    <Cpu className="w-4 h-4 text-cyan-400" />
-                  </div>
-                  <div className="font-display font-black text-[11px] uppercase tracking-widest text-cyan-400 flex items-center gap-1.5">
-                    <span>VALIDATORS ANALYZING</span>
-                    <span className="cursor-blink">|</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    {[0,150,300].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style={{animationDelay:`${d}ms`}} />)}
-                  </div>
-                </div>
-              )}
-
-              {/* Verdict card */}
-              {!busy && currentResult && <VerdictCard result={currentResult} />}
-
-              {/* Contract Specs Grid */}
-              {currentResult && !busy && (() => {
-                const r = currentResult
-                
-                // Get authoritative values or N/A (never fabricate fallback metrics)
-                const taxLabel = r.realTokenData && r.realTokenData.isVerified ? `Buy ${r.realTokenData.buyTax}% / Sell ${r.realTokenData.sellTax}%` : 'N/A'
-
-                const supply  = (r.realTokenData?.totalSupply && r.realTokenData.totalSupply !== 'N/A') ? r.realTokenData.totalSupply : 'N/A'
-                
-                const liq     = (r.realTokenData?.liquidity !== undefined && r.realTokenData.liquidity !== null) 
-                                ? `$${r.realTokenData.liquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
-                                : 'N/A'
-                
-                const creator = r.realTokenData?.creator && r.realTokenData.creator !== 'Unknown Deployer'
-                                ? (r.realTokenData.creator.startsWith('0x') ? fmt(r.realTokenData.creator) : r.realTokenData.creator) 
-                                : fmt(r.tokenAddress)
+              {/* Authoritative Market & Identity Telemetry */}
+              {(() => {
+                const rt = currentResult.realTokenData
+                const price = rt?.price ? `$${rt.price < 0.0001 ? rt.price.toExponential(2) : rt.price.toFixed(4)}` : 'N/A'
+                const liq   = rt?.liquidity != null ? `$${Math.round(rt.liquidity).toLocaleString()}` : 'N/A'
+                const fdv   = rt?.fdv != null ? `$${Math.round(rt.fdv).toLocaleString()}` : 'N/A'
+                const sup   = rt?.totalSupply || 'N/A'
+                const buyT  = rt?.buyTax ? `${rt.buyTax}%` : '0%'
+                const sellT = rt?.sellTax ? `${rt.sellTax}%` : '0%'
 
                 return (
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-                    {[
-                      {label:'TOTAL SUPPLY', value:supply,       icon:'⬡'},
-                      {label:'CREATOR',      value:creator,      icon:'👤'},
-                      {label:'TAX',          value:taxLabel,     icon:'⚡'},
-                      {label:'LIQUIDITY',    value:liq,          icon:'💧'},
-                    ].map(s => (
-                      <div key={s.label} style={{background:'#041414',border:'1px solid rgba(0,255,204,0.12)',borderRadius:8,padding:'10px 12px'}}>
-                        <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',marginBottom:5,fontFamily:'JetBrains Mono,monospace',fontWeight:700,textTransform:'uppercase'}}>{s.icon} {s.label}</div>
-                        <div style={{color:'#fff',fontSize:12,fontFamily:'JetBrains Mono,monospace',fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.value}</div>
+                  <div className="glass-card p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Database className="w-4 h-4 text-cyan-400" />
+                        <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
+                          On-Chain Contract Metrics
+                        </h3>
                       </div>
-                    ))}
+                      <span className="text-[10px] font-mono text-slate-500 uppercase">Provider Verified</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {[
+                        { label: 'PRICE', value: price, desc: 'Market Price' },
+                        { label: 'LIQUIDITY', value: liq, desc: 'DEX Liquidity' },
+                        { label: 'FDV', value: fdv, desc: 'Fully Diluted Val' },
+                        { label: 'TOTAL SUPPLY', value: sup, desc: 'Circulating Supply' },
+                        { label: 'BUY TAX', value: buyT, desc: 'Purchase Fee' },
+                        { label: 'SELL TAX', value: sellT, desc: 'Disposal Fee' },
+                      ].map((item, i) => (
+                        <div key={i} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
+                          <div className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">{item.label}</div>
+                          <div className="text-sm font-mono font-bold text-white mt-0.5 truncate" title={item.value}>{item.value}</div>
+                          <div className="text-[8px] font-sans text-slate-600 mt-0.5">{item.desc}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )
               })()}
 
-              {/* Vulnerability logs */}
-              {currentResult && <RiskFlags flags={currentResult.flags} />}
+              {/* Risk Flags */}
+              <RiskFlags flags={currentResult.flags} />
 
-              {/* Validator breakdown */}
-              {/* GenLayer Validator Committee */}
-              {currentResult && currentResult.validatorVotes.length > 0 && (
-                <div className="cyber-card p-4" style={{borderColor:'rgba(0,255,204,0.1)',flex:'1 1 auto',display:'flex',flexDirection:'column'}}>
-                  <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                    <h3 className="font-display font-bold text-[9px] uppercase tracking-wider text-slate-400">
-                      GenLayer Validator Committee ({currentResult.validatorVotes.length} Nodes)
-                    </h3>
-                    <span className="font-mono text-[8px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded">
+              {/* Authentic GenLayer Validator Committee */}
+              {currentResult.validatorVotes && currentResult.validatorVotes.length > 0 && (
+                <div className="glass-card p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-cyan-400" />
+                      <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
+                        GenLayer Validator Committee ({currentResult.validatorVotes.length} Nodes)
+                      </h3>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 uppercase">
                       {currentResult.telemetry?.resultName || 'CONSENSUS VERIFIED'}
                     </span>
                   </div>
-                  <div className="validator-cards-grid" style={{flex:'1 1 auto'}}>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {currentResult.validatorVotes.map((v, i) => {
-                      const bad = v.vote==='SCAM'||v.vote==='RISKY'
-                      const col = bad ? 'var(--accent-yellow)' : 'var(--accent-cyan)'
-                      const shortAddr = fmt(v.validatorAddress) || `Node #${i+1}`
+                      const bad = v.vote === 'SCAM' || v.vote === 'RISKY'
+                      const col = bad ? 'text-rose-400' : 'text-cyan-400'
+
                       return (
-                        <div key={v.validatorAddress || i} className="validator-card animate-in" style={{borderColor:`${col}30`,backgroundColor:bad?'rgba(255,204,0,0.03)':'rgba(0,255,204,0.03)',animationDelay:`${i*60}ms`,minHeight:150,height:'100%'}}>
-                          <div className="flex justify-between items-center text-[9px] font-mono text-slate-500 font-bold">
-                            <span>#{i+1}</span>
-                            <span className="tracking-wider truncate ml-1 text-slate-400" title={v.validatorAddress}>{shortAddr}</span>
+                        <div key={i} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex flex-col justify-between gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-slate-500 font-bold">Node #{i + 1}</span>
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-cyan-950/40 border border-cyan-800/40 text-cyan-300">
+                              {v.voteName || 'AGREE'}
+                            </span>
                           </div>
-                          <div className="flex items-center justify-center my-3">
-                            <div className="relative w-11 h-11 rounded-full flex items-center justify-center text-xl" style={{background:`radial-gradient(circle,${col}15 0%,transparent 75%)`,border:`1px solid ${col}40`}}>
-                              <Cpu className="w-5 h-5" style={{color:col}} />
-                            </div>
+                          <div className="font-mono text-[10px] text-slate-300 truncate" title={v.validatorAddress}>
+                            {fmt(v.validatorAddress)}
                           </div>
-                          <div>
-                            <div className="text-center font-mono text-[8px] text-slate-400 mb-1">
-                              VOTE: <span style={{color:col,fontWeight:700}}>{v.voteName || 'AGREE'}</span>
-                            </div>
-                            <div className="flex justify-between items-center font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/40 border border-slate-800/60">
-                              <span style={{color:col}}>{v.vote}</span>
-                              <span className="text-emerald-400 text-[8px]">VERIFIED</span>
-                            </div>
+                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-900 text-[10px] font-mono font-bold">
+                            <span className={col}>{v.vote}</span>
+                            <span className="text-[9px] text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> VERIFIED
+                            </span>
                           </div>
                         </div>
                       )
@@ -344,229 +362,176 @@ export default function App() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
 
-              {/* Real GenLayer Consensus Telemetry */}
-              {currentResult && currentResult.validatorVotes.length > 0 && (
-                <div style={{background:'#041414',border:'1px solid rgba(0,255,204,0.08)',borderRadius:10,padding:'14px 16px',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,flexShrink:0}}>
-                  {/* Col 1: Consensus Execution */}
-                  <div>
-                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Consensus Telemetry</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Result</span>
-                        <span style={{fontSize:9,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.telemetry?.resultName || 'MAJORITY_AGREE'}</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Rounds Executed</span>
-                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.telemetry?.roundsExecuted || 1}</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Committed / Revealed</span>
-                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.telemetry?.votesCommitted || 5} / {currentResult.telemetry?.votesRevealed || 5}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Col 2: Intelligent Contract */}
-                  <div>
-                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Intelligent Contract</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Contract</span>
-                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}} title={CONTRACT}>{fmt(CONTRACT)}</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Network</span>
-                        <span style={{fontSize:9,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>Studio (61999)</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Equivalence Schema</span>
-                        <span style={{fontSize:8,color:'#a0c0c0',fontFamily:'JetBrains Mono,monospace'}}>Material Fields</span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Col 3: Evidence Verification */}
-                  <div>
-                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Evidence Verification</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Target Chain</span>
-                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.chainId.toUpperCase()}</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Chain-Matched</span>
-                        <span style={{fontSize:9,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>Enforced</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Sufficiency</span>
-                        <span style={{fontSize:9,color:currentResult.verdict === 'UNKNOWN' ? 'var(--accent-yellow)' : 'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>
-                          {currentResult.evidenceSufficiency || (currentResult.verdict === 'UNKNOWN' ? 'INSUFFICIENT' : 'SUFFICIENT')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+          {/* Case 3: Idle / Standby Screen */}
+          {!busy && !currentResult && (
+            <div className="glass-card p-8 text-center flex flex-col items-center justify-center min-h-[380px]">
+              <div className="relative w-20 h-20 mb-5 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border border-cyan-500/20 animate-spin-slow" />
+                <div className="w-16 h-16 rounded-full bg-cyan-500/5 border border-cyan-500/20 flex items-center justify-center">
+                  <Shield className="w-8 h-8 text-cyan-400/70" />
                 </div>
-              )}
+              </div>
 
-              {/* Idle standby */}
-              {scanState.status==='idle' && (
-                <div className="cyber-card flex flex-col flex-1" style={{borderColor:'rgba(0,255,204,0.1)'}}>
-                  <div className="flex flex-col items-center justify-center p-8 flex-1">
-                    <div className="relative mb-4" style={{width:72,height:72}}>
-                      <div className="absolute inset-0 rounded-full" style={{border:'2px solid rgba(0,255,204,0.15)',animation:'spin 8s linear infinite'}} />
-                      <div className="absolute inset-2 rounded-full" style={{border:'1px dashed rgba(0,255,204,0.3)',animation:'spin 5s linear infinite reverse'}} />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Shield className="w-7 h-7 text-cyan-400/50" />
-                      </div>
-                    </div>
-                    <h3 className="font-display text-[11px] uppercase tracking-widest mb-1 text-cyan-400/60">System Standby</h3>
-                    <p className="font-mono text-[9px] text-slate-500 text-center max-w-xs leading-normal">
-                      Enter a contract address on the left to begin decentralized validator consensus analysis.
-                    </p>
-                  </div>
-                  <div className="p-4 border-t border-slate-900/60" style={{background:'#020d0d'}}>
-                    <div className="font-display text-[9px] uppercase tracking-widest mb-2 text-cyan-400/40">Quick Scan Targets</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        {name:'USDC',chain:'ETH',safe:true,addr:'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',chainId:'ethereum'},
-                        {name:'Honeypot',chain:'BSC',safe:false,addr:'0x4f128e6dbd1283c799a4e21a2c91a329d48b1111',chainId:'bsc'},
-                        {name:'WBTC',chain:'ETH',safe:true,addr:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',chainId:'ethereum'},
-                        {name:'SafeMoon',chain:'BSC',safe:false,addr:'0x8076C74C5e3F5852037F31Ff0093Eeb8c8ADd8D3',chainId:'bsc'},
-                        {name:'UNI',chain:'ETH',safe:true,addr:'0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',chainId:'ethereum'},
-                        {name:'SquidGame',chain:'BSC',safe:false,addr:'0x58d4B9e633B41E6f00d24C3D5A96c4D4e8b55dA8',chainId:'bsc'},
-                      ].map((t,i) => (
-                        <button key={i}
-                          onClick={() => handleScan(t.addr, t.chainId)}
-                          className="group relative rounded font-mono text-[10px] text-left transition-all p-2"
-                          style={{background:'#000',border:`1px solid ${t.safe?'rgba(0,255,204,0.15)':'rgba(255,0,64,0.15)'}`}}
-                        >
-                          <div className="font-bold text-white truncate">{t.name}</div>
-                          <div className={`inline-block text-[8px] px-1 rounded mt-0.5 font-mono ${getChainBadge(t.chain)}`}>{t.chain}</div>
-                          <div className="absolute inset-0 rounded flex items-center justify-center text-[8px] font-display font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity" style={{background:'rgba(0,0,0,0.88)',color:t.safe?'var(--accent-cyan)':'#ff0040'}}>
-                            Click to Scan
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400 bg-slate-900/60 border border-slate-800 mb-3">
+                SYSTEM STANDBY • READY FOR ANALYSIS
+              </span>
+
+              <h3 className="font-display font-bold text-xl text-white mb-2">
+                Decentralized Threat Detection
+              </h3>
+              <p className="text-xs text-slate-400 font-sans max-w-md leading-relaxed mb-6">
+                Enter any smart contract address on the left console to trigger decentralized AI consensus directly across GenLayer validator nodes.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 max-w-sm w-full text-left font-mono text-[10px]">
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                  <div className="text-slate-500 uppercase font-bold">Intelligent Contract</div>
+                  <div className="text-white font-semibold mt-0.5 truncate">{fmt(CONTRACT)}</div>
                 </div>
-              )}
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                  <div className="text-slate-500 uppercase font-bold">Byzantine Engine</div>
+                  <div className="text-emerald-400 font-semibold mt-0.5">Online & Active</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT PANEL: CONSENSUS ENGINE PIPELINE & ARCHITECTURE (Col 9-12) ── */}
+        <div className="lg:col-span-3 flex flex-col gap-6">
+          <div className="glass-card p-5">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-cyan-400" />
+                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
+                  AI Consensus Engine
+                </h3>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase border ${
+                busy ? 'bg-cyan-950/40 text-cyan-400 border-cyan-500/30 animate-pulse' : 'bg-slate-900 text-slate-500 border-slate-800'
+              }`}>
+                {busy ? 'Running' : currentResult ? 'Finalized' : 'Standby'}
+              </span>
             </div>
 
-            {/* PANEL RIGHT */}
-            <div className="panel-right">
-              <div className="panel-right-inner">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-display font-bold text-[9px] uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-                    <span className="truncate">AI Agent Consensus</span>
-                  </h3>
-                  <span className={`px-2 py-0.5 rounded border text-[8px] font-mono font-bold uppercase tracking-wider flex-shrink-0 ${busy ? 'border-cyan-400/25 bg-cyan-400/5 text-cyan-400 animate-pulse' : 'border-slate-700/30 bg-slate-900/30 text-slate-500'}`}>
-                    {busy ? 'Running' : currentResult ? 'AI Thought' : 'Standby'}
-                  </span>
-                </div>
+            {/* 5 Consensus Stages */}
+            <div className="flex flex-col gap-2">
+              {CONSENSUS_PIPELINE.map((s, idx) => {
+                let statusLabel = 'STANDBY'
+                let badgeStyle = 'bg-slate-900/60 text-slate-500 border-slate-800/60'
+                let numColor = 'text-slate-600'
+                let titleColor = 'text-slate-400'
+                let containerClass = 'opacity-60 bg-slate-950/30 border-slate-900/60'
 
-                {busy && (() => {
+                if (busy) {
                   let currentIdx = 0
                   if (scanState.status === 'proposing') currentIdx = 1
                   else if (scanState.status === 'committing') currentIdx = 2
                   else if (scanState.status === 'revealing') currentIdx = 3
                   else if (scanState.status === 'accepted') currentIdx = 4
 
-                  const stages = [
-                    { stage: '01', name: 'Mempool & Queue', desc: 'Web nondet input resolution' },
-                    { stage: '02', name: 'Leader Proposal', desc: 'Deterministic AST execution' },
-                    { stage: '03', name: 'Commit Phase', desc: 'Cryptographic hash commitment' },
-                    { stage: '04', name: 'Vote Revelation', desc: 'Byzantine majority agreement' },
-                    { stage: '05', name: 'Finalization', desc: 'Contract storage state committed' },
-                  ]
+                  if (idx < currentIdx) {
+                    statusLabel = 'DONE'
+                    badgeStyle = 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40'
+                    numColor = 'text-emerald-400'
+                    titleColor = 'text-slate-300'
+                    containerClass = 'bg-slate-950/50 border-slate-800/60'
+                  } else if (idx === currentIdx) {
+                    statusLabel = 'RUNNING'
+                    badgeStyle = 'bg-cyan-950/50 text-cyan-400 border-cyan-500/40 animate-pulse'
+                    numColor = 'text-cyan-400'
+                    titleColor = 'text-white font-bold'
+                    containerClass = 'bg-cyan-950/15 border-cyan-500/30'
+                  } else {
+                    statusLabel = 'QUEUED'
+                    badgeStyle = 'bg-slate-900/40 text-slate-600 border-slate-800/40'
+                    numColor = 'text-slate-600'
+                    titleColor = 'text-slate-500'
+                    containerClass = 'bg-slate-950/20 border-slate-900/40'
+                  }
+                } else if (currentResult) {
+                  statusLabel = 'VERIFIED'
+                  badgeStyle = 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40'
+                  numColor = 'text-emerald-400'
+                  titleColor = 'text-slate-200'
+                  containerClass = 'bg-slate-950/60 border-slate-800/80'
+                }
 
-                  return (
-                    <div className="space-y-2 mt-2">
-                      {stages.map((s, idx) => {
-                        const isCurrent = idx === currentIdx
-                        const isDone = idx < currentIdx
-                        const badgeText = isDone ? 'DONE' : isCurrent ? 'RUNNING' : 'QUEUED'
-                        const badgeClass = isDone
-                          ? 'bg-emerald-950/30 text-emerald-400 border-emerald-800/40'
-                          : isCurrent
-                          ? 'bg-cyan-950/40 text-cyan-400 border-cyan-500/40 animate-pulse'
-                          : 'bg-slate-900/40 text-slate-600 border-slate-800/40'
-                        const numClass = isDone ? 'text-emerald-400' : isCurrent ? 'text-cyan-400' : 'text-slate-600'
-                        const titleClass = isCurrent ? 'text-white font-bold' : isDone ? 'text-slate-300' : 'text-slate-500'
-
-                        return (
-                          <div key={s.stage} className={`validator-list-item ${isCurrent ? 'border-cyan-500/30 bg-cyan-950/10' : ''}`}>
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className={`font-mono text-[9px] font-bold ${numClass}`}>{s.stage}</span>
-                              <div className="truncate">
-                                <div className={`font-mono text-[9px] truncate ${titleClass}`}>{s.name}</div>
-                                <div className="font-mono text-[8px] text-slate-500 truncate">{s.desc}</div>
-                              </div>
-                            </div>
-                            <span className={`font-mono text-[8px] px-1.5 py-0.5 rounded border flex-shrink-0 ${badgeClass}`}>{badgeText}</span>
-                          </div>
-                        )
-                      })}
+                return (
+                  <div
+                    key={s.stage}
+                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 transition-all ${containerClass}`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className={`font-mono text-xs font-bold ${numColor}`}>{s.stage}</span>
+                      <div className="truncate">
+                        <div className={`text-xs font-sans truncate ${titleColor}`}>{s.name}</div>
+                        <div className="text-[9px] font-mono text-slate-500 truncate">{s.desc}</div>
+                      </div>
                     </div>
-                  )
-                })()}
-
-                {currentResult && !busy && (() => {
-                  const score = Math.round(currentResult.riskScore)
-                  const isUnk = currentResult.verdict === 'UNKNOWN'
-                  const scoreColor = isUnk ? 'var(--accent-yellow)' : score > 70 ? 'var(--accent-red)' : score >= 40 ? 'var(--accent-yellow)' : 'var(--accent-cyan)'
-                  return (
-                    <>
-                      <p className="text-[10px] leading-relaxed text-slate-400 font-mono mt-2">
-                        The decentralized AI oracle network has independently analyzed the AST bytecode, liquidity metrics, and deployer history.
-                        Consensus has been reached via Byzantine fault-tolerant aggregation.
-                        {isUnk ? ' Authoritative identity or market data was insufficient on the selected chain to determine a conclusive security rating.' : isMalicious ? ' High probability of rug-pull or honeypot mechanics detected.' : ' Contract parameters conform to safe standards.'}
-                      </p>
-                      <div className="mt-auto pt-3 border-t border-slate-900/60">
-                        <div style={{color:'#5c7a7a',fontSize:9,fontFamily:'JetBrains Mono,monospace',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>
-                          {isUnk ? 'INSUFFICIENT DATA RATING' : 'Consensus Score'}
-                        </div>
-                        <div style={{display:'flex',alignItems:'baseline',gap:4,marginBottom:8}}>
-                          <span style={{fontSize:32,fontWeight:900,fontFamily:'Orbitron,sans-serif',color:scoreColor,lineHeight:1,textShadow:`0 0 20px ${scoreColor}60`}}>{score}</span>
-                          <span style={{fontSize:16,color:'#3d6060',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>/100</span>
-                        </div>
-                        <div style={{width:'100%',height:4,background:'#0a1a1a',borderRadius:2,overflow:'hidden'}}>
-                          <div style={{height:'100%',width:`${score}%`,background:scoreColor,borderRadius:2,transition:'width 1s ease',boxShadow:`0 0 8px ${scoreColor}60`}} />
-                        </div>
-                      </div>
-                    </>
-                  )
-                })()}
-
-                {!busy && !currentResult && (
-                  <div className="space-y-2 mt-2">
-                    {[
-                      { stage: '01', name: 'Mempool & Queue', desc: 'Web nondet input resolution' },
-                      { stage: '02', name: 'Leader Proposal', desc: 'Deterministic AST execution' },
-                      { stage: '03', name: 'Commit Phase', desc: 'Cryptographic hash commitment' },
-                      { stage: '04', name: 'Vote Revelation', desc: 'Byzantine majority agreement' },
-                      { stage: '05', name: 'Finalization', desc: 'Contract storage state committed' },
-                    ].map(s => (
-                      <div key={s.stage} className="validator-list-item opacity-60 border-slate-900/60 bg-slate-950/20">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className="font-mono text-[9px] text-slate-600 font-bold">{s.stage}</span>
-                          <div className="truncate">
-                            <div className="font-mono text-[9px] font-bold text-slate-400 truncate">{s.name}</div>
-                            <div className="font-mono text-[8px] text-slate-600 truncate">{s.desc}</div>
-                          </div>
-                        </div>
-                        <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-slate-900/60 text-slate-500 border border-slate-800/60 flex-shrink-0">STANDBY</span>
-                      </div>
-                    ))}
+                    <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border uppercase flex-shrink-0 ${badgeStyle}`}>
+                      {statusLabel}
+                    </span>
                   </div>
-                )}
-              </div>
+                )
+              })}
             </div>
 
-          </main>
+            {/* Architecture specification */}
+            <div className="mt-5 pt-4 border-t border-slate-800/80 text-[11px] font-sans text-slate-400 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Intelligent Contract:</span>
+                <button
+                  onClick={copyContractAddr}
+                  className="font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                  title={CONTRACT}
+                >
+                  {fmt(CONTRACT)}
+                  {copiedAddr ? <span className="text-[9px] text-emerald-400">COPIED</span> : null}
+                </button>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Consensus Model:</span>
+                <span className="font-mono text-slate-300">Material Equivalence</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Chain Scope:</span>
+                <span className="font-mono text-slate-300">Strict Bounded</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="monitor-stand" />
-      </div>
+      </main>
+
+      {/* ── FOOTER ── */}
+      <footer className="border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-auto text-center text-xs font-mono text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div>
+          ScamShield AI • Powered by GenLayer Intelligent Contracts & Decentralized Validators
+        </div>
+        <div className="flex items-center gap-4">
+          <a
+            href="https://studio.genlayer.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-cyan-400 transition-colors"
+          >
+            GenLayer Studio
+          </a>
+          <span>•</span>
+          <a
+            href="https://github.com/YousufAziz1/scamshield"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-cyan-400 transition-colors"
+          >
+            GitHub
+          </a>
+        </div>
+      </footer>
     </div>
   )
 }

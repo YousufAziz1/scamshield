@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Flag, ChevronDown, ChevronUp } from 'lucide-react'
+import { ShieldAlert, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import type { RiskFlag } from '@/types'
 
@@ -7,22 +7,16 @@ interface RiskFlagsProps {
   flags: RiskFlag[]
 }
 
-const SEVERITY_CONFIG: Record<string, { color: string; dot: string }> = {
-  critical: { color: '#ff0040', dot: '#ff0040' },
-  high:     { color: '#ff4060', dot: '#ff4060' },
-  medium:   { color: '#ffcc00', dot: '#ffcc00' },
-  low:      { color: '#3b82f6', dot: '#60a5fa' },
-  info:     { color: '#5c7a7a', dot: '#5c7a7a' },
+const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
+  critical: { color: 'text-rose-400',   bg: 'bg-rose-950/40',   border: 'border-rose-500/30' },
+  high:     { color: 'text-orange-400', bg: 'bg-orange-950/40', border: 'border-orange-500/30' },
+  medium:   { color: 'text-amber-400',  bg: 'bg-amber-950/40',  border: 'border-amber-500/30' },
+  low:      { color: 'text-sky-400',    bg: 'bg-sky-950/40',    border: 'border-sky-500/30' },
+  info:     { color: 'text-slate-400',  bg: 'bg-slate-900/60',  border: 'border-slate-700/40' },
 }
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3, info: 4,
-}
-
-function fakeTs(i: number) {
-  const now = new Date()
-  now.setSeconds(now.getSeconds() - i * 3)
-  return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`
 }
 
 function normSeverity(raw: string): string {
@@ -30,7 +24,7 @@ function normSeverity(raw: string): string {
   return (s in SEVERITY_ORDER) ? s : 'info'
 }
 
-function FlagItem({ flag, index }: { flag: RiskFlag; index: number }) {
+function FlagItem({ flag }: { flag: RiskFlag }) {
   const [open, setOpen] = useState(false)
   const sev  = normSeverity(flag.severity)
   const cfg  = SEVERITY_CONFIG[sev] || SEVERITY_CONFIG['info']
@@ -38,40 +32,35 @@ function FlagItem({ flag, index }: { flag: RiskFlag; index: number }) {
   const detail = flag.detail || 'No additional details provided.'
 
   return (
-    <div
-      className="vuln-log-entry flex-col"
-      style={{ borderColor: open ? `${cfg.color}30` : undefined }}
-    >
+    <div className="border-b border-slate-800/60 last:border-none py-2.5">
       <button
         onClick={() => setOpen(!open)}
-        style={{ display:'flex', alignItems:'center', gap:8, width:'100%', textAlign:'left', background:'none', border:'none', cursor:'pointer', padding:'2px 0', minWidth:0 }}
+        className="w-full text-left flex items-center justify-between gap-3 cursor-pointer group"
       >
-        <span style={{ width:7, height:7, borderRadius:'50%', backgroundColor:cfg.dot, flexShrink:0, marginTop:1, boxShadow:`0 0 6px ${cfg.dot}` }} />
-        <span style={{ color:'#2e4a4a', fontSize:9, fontFamily:'JetBrains Mono,monospace', flexShrink:0, width:58 }}>
-          {fakeTs(index)}
-        </span>
-        <span style={{ fontSize:8, fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase', padding:'1px 5px', borderRadius:3, background:`${cfg.color}15`, color:cfg.color, border:`1px solid ${cfg.color}25`, flexShrink:0 }}>
-          {sev}
-        </span>
-        <span style={{ color:'#b0c8c8', fontSize:10, fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>
-          {label}
-        </span>
-        {open
-          ? <ChevronUp style={{ width:11, height:11, color:'#3d6060', flexShrink:0 }} />
-          : <ChevronDown style={{ width:11, height:11, color:'#3d6060', flexShrink:0 }} />
-        }
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${cfg.bg} ${cfg.border} ${cfg.color} flex-shrink-0`}>
+            {sev}
+          </span>
+          <span className="text-xs font-sans font-medium text-slate-200 group-hover:text-cyan-300 transition-colors truncate">
+            {label}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-slate-500 group-hover:text-slate-300 flex-shrink-0">
+          <span className="text-[10px] font-mono">{open ? 'Hide' : 'Details'}</span>
+          {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </div>
       </button>
 
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ height:0, opacity:0 }}
-            animate={{ height:'auto', opacity:1 }}
-            exit={{ height:0, opacity:0 }}
-            transition={{ duration:0.2 }}
-            style={{ overflow:'hidden' }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
           >
-            <div style={{ paddingLeft:15, paddingTop:6, paddingBottom:4, fontSize:10, color:'#5c7a7a', lineHeight:1.6 }}>
+            <div className="pt-2 pl-2 pr-1 text-xs text-slate-400 font-sans leading-relaxed">
               {detail}
             </div>
           </motion.div>
@@ -89,26 +78,31 @@ export function RiskFlags({ flags }: RiskFlagsProps) {
   })
 
   return (
-    <div className="cyber-card" style={{ padding:'12px 14px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-        <Flag style={{ width:12, height:12, color:'var(--accent-cyan)', flexShrink:0 }} />
-        <h3 className="font-display font-bold" style={{ fontSize:9, letterSpacing:'0.12em', textTransform:'uppercase', color:'#8ab0b0' }}>
-          Vulnerability Logs ({flags.length})
-        </h3>
+    <div className="glass-card p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-cyan-400" />
+          <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
+            Security Findings & Risk Flags ({flags.length})
+          </h3>
+        </div>
+        <span className="text-[10px] font-mono text-slate-500 uppercase">
+          Static & Dynamic Analysis
+        </span>
       </div>
 
-      <div className="vuln-log" style={{ padding: flags.length === 0 ? '10px 12px' : '6px 10px' }}>
+      <div className="bg-slate-950/60 rounded-xl border border-slate-800/80 px-4 py-2">
         {flags.length === 0 ? (
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ width:7, height:7, borderRadius:'50%', backgroundColor:'var(--accent-cyan)', boxShadow:'0 0 6px var(--accent-cyan)', flexShrink:0 }} />
-            <span style={{ color:'var(--accent-cyan)', fontSize:10, fontWeight:700, letterSpacing:'0.08em' }}>
-              ALL CLEAR — No vulnerabilities flagged
+          <div className="flex items-center gap-2.5 py-3">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="text-xs font-sans font-medium text-emerald-400">
+              ALL CLEAR — No malicious functions or critical vulnerabilities detected
             </span>
           </div>
         ) : (
           sorted.map((f, i) => {
             const key = f.id || f.label || String(i)
-            return <FlagItem key={key} flag={f} index={i} />
+            return <FlagItem key={key} flag={f} />
           })
         )}
       </div>

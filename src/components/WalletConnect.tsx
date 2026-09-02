@@ -28,32 +28,34 @@ export function WalletConnect({ wallet, onConnect, onDisconnect }: WalletConnect
     return (
       <div className="flex items-center gap-2">
         <motion.div
-          className="flex items-center gap-2 px-3 py-2 rounded-full text-xs font-mono border transition-all duration-300"
+          className="flex items-center gap-2.5 px-3 py-1.5 rounded-full text-xs font-mono border backdrop-blur-md transition-all duration-300"
           style={{
-            background: 'rgba(15, 23, 42, 0.45)',
-            borderColor: 'var(--border-accent, rgba(255,255,255,0.05))',
-            color: 'var(--text-primary)',
+            background: 'rgba(15, 23, 42, 0.65)',
+            borderColor: 'rgba(0, 242, 254, 0.25)',
+            color: '#F8FAFC',
           }}
-          whileHover={{ borderColor: 'var(--accent)', boxShadow: '0 0 10px var(--accent-glow)' }}
+          whileHover={{ borderColor: 'var(--accent-cyan)', boxShadow: '0 0 16px rgba(0, 242, 254, 0.25)' }}
         >
-          <span className="w-2 h-2 rounded-full pulse-dot-green flex-shrink-0" style={{ background: 'var(--accent-green)' }} />
-          <span className="font-semibold">{shortAddress}</span>
+          <div className="relative flex items-center justify-center">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="absolute w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-75" />
+          </div>
+          <span className="font-medium text-slate-200">{shortAddress}</span>
           <button
             onClick={copyAddress}
-            className="p-1 hover:text-slate-200 transition-colors cursor-pointer"
-            style={{ color: 'var(--text-muted)' }}
+            className="p-1 hover:text-cyan-300 text-slate-400 transition-colors cursor-pointer"
             title="Copy address"
           >
-            {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--accent-green)' }} /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
         </motion.div>
+
         <button
           onClick={onDisconnect}
-          className="p-2.5 rounded-full transition-all duration-300 hover:bg-red-950/20 cursor-pointer"
-          style={{ color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.15)' }}
+          className="p-2 rounded-full transition-all duration-300 hover:bg-red-950/30 text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 cursor-pointer"
           title="Disconnect wallet"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-3.5 h-3.5" />
         </button>
       </div>
     )
@@ -64,17 +66,10 @@ export function WalletConnect({ wallet, onConnect, onDisconnect }: WalletConnect
       id="connect-wallet-btn"
       onClick={onConnect}
       disabled={wallet.isConnecting}
-      className="btn-cyber px-5 py-2.5 text-xs flex items-center gap-2 font-bold transition-all duration-200"
-      style={{
-        background: 'transparent',
-        border: '1px solid var(--accent-cyan)',
-        color: 'var(--accent-cyan)',
-      }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(0,255,204,0.08)' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
+      className="btn-primary-glow text-xs py-2 px-4.5 rounded-full flex items-center gap-2 font-display tracking-wider font-bold transition-all duration-200"
     >
-      <Wallet className="w-4 h-4" />
-      {wallet.isConnecting ? 'Connecting...' : 'Connect Wallet'}
+      <Wallet className="w-4 h-4 text-black" />
+      <span>{wallet.isConnecting ? 'CONNECTING...' : 'CONNECT WALLET'}</span>
     </button>
   )
 }
