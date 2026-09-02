@@ -19,9 +19,19 @@ export interface RiskFlag {
 }
 
 export interface ValidatorVote {
-  validatorId: string
+  validatorAddress: string // Authentic validator address from GenLayer round_validators (e.g. 0x3D61...0c14)
+  voteName: string        // Consensus vote name from GenLayer (e.g. 'AGREE', 'IDLE')
   vote: Verdict
-  confidence: number
+}
+
+export interface GenLayerTelemetry {
+  roundsExecuted: number
+  votesCommitted: number
+  votesRevealed: number
+  resultName: string      // e.g. 'MAJORITY_AGREE'
+  contractAddress: string
+  networkName: string
+  chainId: number
 }
 
 export interface ScanResult {
@@ -35,6 +45,13 @@ export interface ScanResult {
   validatorVotes: ValidatorVote[]
   scannedAt: number
   txHash: string
+  telemetry?: GenLayerTelemetry
+  evidenceSufficiency?: 'SUFFICIENT' | 'INSUFFICIENT'
+  tokenIdentity?: {
+    name: string
+    symbol: string
+    chain: string
+  }
   realTokenData?: {
     name: string
     symbol: string

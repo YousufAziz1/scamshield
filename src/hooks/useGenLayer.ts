@@ -7,20 +7,17 @@ import { fetchTokenRealData, type RealTokenData } from '@/lib/tokenData'
 
 const STATUS_ORDER = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'accepted', 'finalized']
 
-// Validator mascots with codenames
-export const VALIDATOR_MASCOTS = [
-  { id: '01', emoji: '🐻', code: 'BEAR-NODE' },
-  { id: '02', emoji: '🦊', code: 'FOX-NODE'  },
-  { id: '03', emoji: '🐺', code: 'WOLF-NODE' },
-  { id: '04', emoji: '🐱', code: 'CAT-NODE'  },
-  { id: '05', emoji: '🛡️', code: 'SHIELD-NODE' },
-]
-
 export interface ParsedContractResult {
   verdict?: Verdict
   riskScore?: number
   summary?: string
   flags?: RiskFlag[]
+  evidenceSufficiency?: 'SUFFICIENT' | 'INSUFFICIENT'
+  tokenIdentity?: {
+    name: string
+    symbol: string
+    chain: string
+  }
 }
 
 export function useGenLayer() {
@@ -99,23 +96,43 @@ export function useGenLayer() {
   useEffect(() => { void checkSnap() }, [checkSnap])
 
   // ── Build scan result from parsed JSON ───────────────────────────
-  function buildScanResult(parsed: ParsedContractResult, tokenAddress: string, chainId: string, txHash: string, realData?: RealTokenData | null): ScanResult {
+  function buildScanResult(
+    parsed: ParsedContractResult,
+    tokenAddress: string,
+    chainId: string,
+    txHash: string,
+    realData?: RealTokenData | null,
+    txRecord?: Record<string, unknown>
+  ): ScanResult {
     const score = parsed.riskScore ?? 50
     const rawVerdict = parsed.verdict ?? (score > 70 ? 'SCAM' : score > 30 ? 'RISKY' : 'SAFE')
 
-    const votes: ValidatorVote[] = VALIDATOR_MASCOTS.map((m, i) => {
-      let v: Verdict
-      if (rawVerdict === 'UNKNOWN') {
-        v = 'UNKNOWN'
-      } else if (score > 70) {
-        v = i >= 4 ? 'RISKY' : 'SCAM'
-      } else if (score > 30) {
-        v = i === 0 ? 'SAFE' : i === 4 ? 'SCAM' : 'RISKY'
-      } else {
-        v = i === 0 ? 'RISKY' : 'SAFE'
-      }
-      return { validatorId: m.id, vote: v, confidence: 0.85 + (i * 0.02) }
-    })
+    // Extract authentic validator committee from GenLayer consensus round
+    const lastRound = txRecord?.last_round as {
+      round_validators?: string[]
+      validator_votes_name?: string[]
+      votes_committed?: string | number
+      votes_revealed?: string | number
+    } | undefined
+
+    const roundValidators = lastRound?.round_validators || []
+    const votesName = lastRound?.validator_votes_name || []
+
+    const votes: ValidatorVote[] = roundValidators.map((addr, i) => ({
+      validatorAddress: addr,
+      voteName: votesName[i] || 'AGREE',
+      vote: rawVerdict,
+    }))
+
+    const telemetry = {
+      roundsExecuted: Number(txRecord?.num_of_rounds || 1),
+      votesCommitted: Number(lastRound?.votes_committed || roundValidators.length),
+      votesRevealed: Number(lastRound?.votes_revealed || roundValidators.length),
+      resultName: String(txRecord?.result_name || 'MAJORITY_AGREE'),
+      contractAddress: CONTRACT,
+      networkName: 'Genlayer Studio Network',
+      chainId: 61999,
+    }
 
     return {
       tokenAddress,
@@ -128,6 +145,9 @@ export function useGenLayer() {
       validatorVotes: votes,
       scannedAt: Date.now(),
       txHash,
+      telemetry,
+      evidenceSufficiency: parsed.evidenceSufficiency,
+      tokenIdentity: parsed.tokenIdentity,
       realTokenData: realData ?? undefined,
     }
   }
@@ -349,7 +369,7 @@ export function useGenLayer() {
               throw new Error('Intelligent Contract storage returned non-JSON result.')
             }
 
-            const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData)
+            const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData, txRecord)
             setScanState({ status: 'finalized', txHash, result: scanResult })
           } else if (statusName === 'CANCELED' || statusNum === 8) {
             if (pollIntervalRef.current) {

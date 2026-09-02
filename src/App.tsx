@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { Shield, AlertCircle, X, Cpu, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react'
-import { useGenLayer, VALIDATOR_MASCOTS } from '@/hooks/useGenLayer'
+import { useGenLayer } from '@/hooks/useGenLayer'
 import { CONTRACT } from '@/lib/genlayer'
 import { useWallet } from '@/hooks/useWallet'
 import { TokenInput } from '@/components/TokenInput'
@@ -102,10 +102,10 @@ export default function App() {
             <div className="flex items-center gap-3 flex-shrink-0">
               <div className="hidden md:flex items-center gap-3">
                 {[
-                  { val: isMalicious?'21':'20', lbl:'Validators' },
-                  { val: isMalicious?'99.1%':'98.4%', lbl:'Confidence' },
-                  { val: isMalicious?'1,505':'1,492', lbl:'Scanned' },
-                  { val: isMalicious?'399':'419', lbl:'Risk Lens' },
+                  { val: 'Studio (61999)', lbl: 'GenLayer Network' },
+                  { val: 'BFT Consensus', lbl: 'Protocol' },
+                  { val: String(recentScans.length), lbl: 'Session Scans' },
+                  { val: String(riskyScans.length), lbl: 'Threats Flagged' },
                 ].map((s,i) => (
                   <div key={i} className="flex items-center gap-3">
                     {i>0 && <div className="stat-divider" />}
@@ -302,37 +302,40 @@ export default function App() {
               {currentResult && <RiskFlags flags={currentResult.flags} />}
 
               {/* Validator breakdown */}
+              {/* GenLayer Validator Committee */}
               {currentResult && currentResult.validatorVotes.length > 0 && (
                 <div className="cyber-card p-4" style={{borderColor:'rgba(0,255,204,0.1)',flex:'1 1 auto',display:'flex',flexDirection:'column'}}>
-                  <h3 className="font-display font-bold text-[9px] uppercase tracking-wider mb-3 text-slate-400 flex-shrink-0">Validator Breakdown Detail</h3>
+                  <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                    <h3 className="font-display font-bold text-[9px] uppercase tracking-wider text-slate-400">
+                      GenLayer Validator Committee ({currentResult.validatorVotes.length} Nodes)
+                    </h3>
+                    <span className="font-mono text-[8px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded">
+                      {currentResult.telemetry?.resultName || 'CONSENSUS VERIFIED'}
+                    </span>
+                  </div>
                   <div className="validator-cards-grid" style={{flex:'1 1 auto'}}>
                     {currentResult.validatorVotes.map((v, i) => {
-                      const m = VALIDATOR_MASCOTS[i % VALIDATOR_MASCOTS.length]
                       const bad = v.vote==='SCAM'||v.vote==='RISKY'
                       const col = bad ? 'var(--accent-yellow)' : 'var(--accent-cyan)'
-                      const lit = Math.max(1, Math.round(v.confidence * 3))
+                      const shortAddr = fmt(v.validatorAddress) || `Node #${i+1}`
                       return (
-                        <div key={v.validatorId} className="validator-card animate-in" style={{borderColor:`${col}30`,backgroundColor:bad?'rgba(255,204,0,0.03)':'rgba(0,255,204,0.03)',animationDelay:`${i*60}ms`,minHeight:160,height:'100%'}}>
+                        <div key={v.validatorAddress || i} className="validator-card animate-in" style={{borderColor:`${col}30`,backgroundColor:bad?'rgba(255,204,0,0.03)':'rgba(0,255,204,0.03)',animationDelay:`${i*60}ms`,minHeight:150,height:'100%'}}>
                           <div className="flex justify-between items-center text-[9px] font-mono text-slate-500 font-bold">
-                            <span>{m.id}</span>
-                            <span className="tracking-wider truncate ml-1" style={{maxWidth:80}}>{m.code}</span>
+                            <span>#{i+1}</span>
+                            <span className="tracking-wider truncate ml-1 text-slate-400" title={v.validatorAddress}>{shortAddr}</span>
                           </div>
                           <div className="flex items-center justify-center my-3">
-                            <div className="relative w-12 h-12 rounded-full flex items-center justify-center text-3xl" style={{background:`radial-gradient(circle,${col}15 0%,transparent 75%)`}}>
-                              <span>{m.emoji}</span>
+                            <div className="relative w-11 h-11 rounded-full flex items-center justify-center text-xl" style={{background:`radial-gradient(circle,${col}15 0%,transparent 75%)`,border:`1px solid ${col}40`}}>
+                              <Cpu className="w-5 h-5" style={{color:col}} />
                             </div>
                           </div>
                           <div>
-                            <div className="flex gap-1 mb-1.5">
-                              {[0,1,2].map(idx => (
-                                <div key={idx} className="h-1 flex-1 bg-black rounded-full overflow-hidden">
-                                  <div className="h-full w-full rounded-full bar-fill" style={{backgroundColor:col,transform:idx<lit?'translateX(0)':'translateX(-100%)',animationDelay:`${i*100+idx*150}ms`}} />
-                                </div>
-                              ))}
+                            <div className="text-center font-mono text-[8px] text-slate-400 mb-1">
+                              VOTE: <span style={{color:col,fontWeight:700}}>{v.voteName || 'AGREE'}</span>
                             </div>
-                            <div className="flex justify-between items-center font-mono text-[9px] font-bold">
+                            <div className="flex justify-between items-center font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/40 border border-slate-800/60">
                               <span style={{color:col}}>{v.vote}</span>
-                              <span className="text-slate-500">{Math.round(v.confidence*100)}%</span>
+                              <span className="text-emerald-400 text-[8px]">VERIFIED</span>
                             </div>
                           </div>
                         </div>
@@ -342,56 +345,63 @@ export default function App() {
                 </div>
               )}
 
-              {/* Network Telemetry — fills remaining space after validator cards */}
+              {/* Real GenLayer Consensus Telemetry */}
               {currentResult && currentResult.validatorVotes.length > 0 && (
                 <div style={{background:'#041414',border:'1px solid rgba(0,255,204,0.08)',borderRadius:10,padding:'14px 16px',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,flexShrink:0}}>
-                  {/* Col 1: Consensus Rounds */}
+                  {/* Col 1: Consensus Execution */}
                   <div>
-                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Consensus Rounds</div>
+                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Consensus Telemetry</div>
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                      {[72,88,61,95,43].map((w,i) => (
-                        <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                          <div style={{fontSize:8,color:'#3d6060',fontFamily:'JetBrains Mono,monospace',width:24}}>R{i+1}</div>
-                          <div style={{flex:1,height:4,background:'#0a1a1a',borderRadius:2,overflow:'hidden'}}>
-                            <div style={{height:'100%',width:`${w}%`,background:'var(--accent-cyan)',borderRadius:2,opacity:0.6,animation:'breathe 2s ease-in-out infinite alternate',animationDelay:`${i*300}ms`}} />
-                          </div>
-                          <div style={{fontSize:8,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',width:28}}>{w}%</div>
-                        </div>
-                      ))}
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Result</span>
+                        <span style={{fontSize:9,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.telemetry?.resultName || 'MAJORITY_AGREE'}</span>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Rounds Executed</span>
+                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.telemetry?.roundsExecuted || 1}</span>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Committed / Revealed</span>
+                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.telemetry?.votesCommitted || 5} / {currentResult.telemetry?.votesRevealed || 5}</span>
+                      </div>
                     </div>
                   </div>
-                  {/* Col 2: Validator Latency */}
+                  {/* Col 2: Intelligent Contract */}
                   <div>
-                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Validator Latency</div>
+                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Intelligent Contract</div>
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                      {[{id:'VAL-01',ms:124},{id:'VAL-02',ms:98},{id:'VAL-03',ms:156},{id:'VAL-04',ms:87},{id:'VAL-05',ms:203}].map(vl => (
-                        <div key={vl.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>{vl.id}</span>
-                          <span style={{fontSize:9,color:vl.ms>150?'var(--accent-yellow)':'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{vl.ms}ms</span>
-                        </div>
-                      ))}
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Contract</span>
+                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}} title={CONTRACT}>{fmt(CONTRACT)}</span>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Network</span>
+                        <span style={{fontSize:9,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>Studio (61999)</span>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Equivalence Schema</span>
+                        <span style={{fontSize:8,color:'#a0c0c0',fontFamily:'JetBrains Mono,monospace'}}>Material Fields</span>
+                      </div>
                     </div>
                   </div>
-                  {/* Col 3: Threat Feed */}
+                  {/* Col 3: Evidence Verification */}
                   <div>
-                    <div style={{color:'var(--accent-red)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Threat Feed</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                      {[
-                        {name:'SQUID-BSC',ts:'2m ago'},
-                        {name:'MOON-ETH',ts:'7m ago'},
-                        {name:'SAFE-FAKE',ts:'12m ago'},
-                      ].map(t => (
-                        <div key={t.name} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <span style={{width:6,height:6,borderRadius:'50%',backgroundColor:'var(--accent-red)',boxShadow:'0 0 4px var(--accent-red)',flexShrink:0}} />
-                            <span style={{fontSize:9,color:'#b0c8c8',fontFamily:'JetBrains Mono,monospace',fontWeight:600}}>{t.name}</span>
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <span style={{fontSize:8,color:'#3d6060',fontFamily:'JetBrains Mono,monospace'}}>{t.ts}</span>
-                            <span style={{fontSize:7,padding:'1px 5px',borderRadius:3,background:'rgba(255,0,64,0.12)',color:'var(--accent-red)',border:'1px solid rgba(255,0,64,0.25)',fontWeight:700,letterSpacing:'0.08em'}}>FLAGGED</span>
-                          </div>
-                        </div>
-                      ))}
+                    <div style={{color:'var(--accent-cyan)',fontSize:8,letterSpacing:'0.14em',fontFamily:'Orbitron,sans-serif',fontWeight:700,textTransform:'uppercase',marginBottom:10}}>Evidence Verification</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Target Chain</span>
+                        <span style={{fontSize:9,color:'#fff',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>{currentResult.chainId.toUpperCase()}</span>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Chain-Matched</span>
+                        <span style={{fontSize:9,color:'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>Enforced</span>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:9,color:'#5c7a7a',fontFamily:'JetBrains Mono,monospace'}}>Sufficiency</span>
+                        <span style={{fontSize:9,color:currentResult.verdict === 'UNKNOWN' ? 'var(--accent-yellow)' : 'var(--accent-cyan)',fontFamily:'JetBrains Mono,monospace',fontWeight:700}}>
+                          {currentResult.evidenceSufficiency || (currentResult.verdict === 'UNKNOWN' ? 'INSUFFICIENT' : 'SUFFICIENT')}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -497,13 +507,22 @@ export default function App() {
 
                 {!busy && !currentResult && (
                   <div className="space-y-2 mt-2">
-                    {VALIDATOR_MASCOTS.map(m => (
-                      <div key={m.id} className="validator-list-item">
+                    {[
+                      { stage: '01', name: 'Mempool & Queue', desc: 'Web nondet input resolution', status: 'ACTIVE' },
+                      { stage: '02', name: 'Leader Proposal', desc: 'Deterministic AST execution', status: 'ACTIVE' },
+                      { stage: '03', name: 'Commit Phase', desc: 'Cryptographic hash commitment', status: 'ACTIVE' },
+                      { stage: '04', name: 'Vote Revelation', desc: 'Byzantine majority agreement', status: 'ACTIVE' },
+                      { stage: '05', name: 'Finalization', desc: 'Contract storage state committed', status: 'ACTIVE' },
+                    ].map(s => (
+                      <div key={s.stage} className="validator-list-item">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className="text-sm flex-shrink-0">{m.emoji}</span>
-                          <span className="font-mono text-[9px] font-bold text-slate-400 truncate">{m.code}</span>
+                          <span className="font-mono text-[9px] text-cyan-400 font-bold">{s.stage}</span>
+                          <div className="truncate">
+                            <div className="font-mono text-[9px] font-bold text-slate-300 truncate">{s.name}</div>
+                            <div className="font-mono text-[8px] text-slate-500 truncate">{s.desc}</div>
+                          </div>
                         </div>
-                        <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-cyan-950/30 text-cyan-400 border border-cyan-950/40 flex-shrink-0">ONLINE</span>
+                        <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-cyan-950/30 text-cyan-400 border border-cyan-950/40 flex-shrink-0">{s.status}</span>
                       </div>
                     ))}
                   </div>

@@ -109,14 +109,14 @@ export function ConsensusProgress({ status, validatorVotes = [], progressPercent
 
               return (
                 <div
-                  key={vote.validatorId}
+                  key={vote.validatorAddress || i}
                   className="w-3 h-3 rounded-full animate-ping"
                   style={{
                     background: color,
                     boxShadow: `0 0 8px ${color}`,
                     animationDelay: `${i * 0.2}s`,
                   }}
-                  title={`Validator ${vote.validatorId}: ${vote.vote}`}
+                  title={`Validator ${vote.validatorAddress || i + 1}: ${vote.vote} (${vote.voteName || 'AGREE'})`}
                 />
               )
             })}

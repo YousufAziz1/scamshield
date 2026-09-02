@@ -189,13 +189,33 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     mockWriteContract.mockResolvedValue('0xtx_finalized')
     mockGetTransaction.mockResolvedValue({
       status: TransactionStatus.FINALIZED,
-      result_name: 'SUCCESS',
+      result_name: 'MAJORITY_AGREE',
+      num_of_rounds: 1,
+      last_round: {
+        round_validators: [
+          '0x98519402C343C310f9f08331BB85b51790856B55',
+          '0x75F08bf39C258Fe4E9cd2bD3DE34D60221fF67BD',
+          '0xaC93f1a42D9448eD28Db13Bef50460094034566B',
+          '0xc699a9aaE3Af1feF509931aCc94cC8c58dc1f7f7',
+          '0xA628666C76158eEB0a2404A685a332dF49082CDA',
+        ],
+        validator_votes_name: ['AGREE', 'IDLE', 'IDLE', 'AGREE', 'AGREE'],
+        votes_committed: 5,
+        votes_revealed: 5,
+      },
     })
     mockReadContract.mockResolvedValue(
       JSON.stringify({
         verdict: 'SAFE',
         riskScore: 12,
+        evidenceSufficiency: 'SUFFICIENT',
+        tokenIdentity: {
+          name: 'Wingston by Rally',
+          symbol: 'WNGST',
+          chain: 'ethereum',
+        },
         summary: 'Authoritative analysis verified via validator consensus.',
+        flags: [],
       })
     )
 
@@ -223,6 +243,21 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     expect(result.current.scanState.result?.realTokenData?.symbol).toBe('WNGST')
     expect(result.current.scanState.result?.realTokenData?.name).not.toContain('Solayer')
     expect(result.current.scanState.result?.realTokenData?.symbol).not.toBe('LAYER')
+
+    // Authentic validator committee from GenLayer consensus
+    expect(result.current.scanState.result?.validatorVotes).toHaveLength(5)
+    expect(result.current.scanState.result?.validatorVotes[0]?.validatorAddress).toBe('0x98519402C343C310f9f08331BB85b51790856B55')
+    expect(result.current.scanState.result?.validatorVotes[0]?.voteName).toBe('AGREE')
+
+    // Real GenLayer telemetry
+    expect(result.current.scanState.result?.telemetry?.resultName).toBe('MAJORITY_AGREE')
+    expect(result.current.scanState.result?.telemetry?.votesCommitted).toBe(5)
+    expect(result.current.scanState.result?.telemetry?.votesRevealed).toBe(5)
+
+    // Material verdict equivalence fields
+    expect(result.current.scanState.result?.evidenceSufficiency).toBe('SUFFICIENT')
+    expect(result.current.scanState.result?.tokenIdentity?.name).toBe('Wingston by Rally')
+    expect(result.current.scanState.result?.tokenIdentity?.symbol).toBe('WNGST')
   })
 
   // ── 7. FINALIZED + FAILED EXECUTION -> THROWS EXECUTION ERROR ────────────
@@ -297,6 +332,52 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     expect(result.current.scanState.status).toBe('error')
     expect(result.current.scanState.error).toContain('Transaction reverted')
     expect(result.current.isSimulated).toBe(false)
+  })
+
+  // ── 10. NO SYNTHETIC MASCOTS OR STATIC TELEMETRY ──────────────────────────
+  it('verifies that no synthetic node mascots (BEAR-NODE, FOX-NODE, etc.) exist in the consensus output', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_clean')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'MAJORITY_AGREE',
+      last_round: {
+        round_validators: ['0x1111111111111111111111111111111111111111'],
+        validator_votes_name: ['AGREE'],
+      },
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        verdict: 'UNKNOWN',
+        riskScore: 50,
+        evidenceSufficiency: 'INSUFFICIENT',
+        summary: 'No authoritative data found.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken('0x0000000000000000000000000000000000000000', 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    const votes = result.current.scanState.result?.validatorVotes || []
+    const serializedVotes = JSON.stringify(votes)
+
+    expect(serializedVotes).not.toContain('BEAR-NODE')
+    expect(serializedVotes).not.toContain('FOX-NODE')
+    expect(serializedVotes).not.toContain('WOLF-NODE')
+    expect(serializedVotes).not.toContain('CAT-NODE')
+    expect(serializedVotes).not.toContain('SHIELD-NODE')
+    expect(result.current.scanState.result?.evidenceSufficiency).toBe('INSUFFICIENT')
   })
 })
 
