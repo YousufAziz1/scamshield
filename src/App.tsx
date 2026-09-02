@@ -465,18 +465,51 @@ export default function App() {
                   </span>
                 </div>
 
-                {busy && (
-                  <div className="font-mono text-[9px] space-y-2 text-slate-400 mt-2">
-                    <div className="text-cyan-400 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse flex-shrink-0" />
-                      <span>Resolving non-deterministic variables...</span>
+                {busy && (() => {
+                  let currentIdx = 0
+                  if (scanState.status === 'proposing') currentIdx = 1
+                  else if (scanState.status === 'committing') currentIdx = 2
+                  else if (scanState.status === 'revealing') currentIdx = 3
+                  else if (scanState.status === 'accepted') currentIdx = 4
+
+                  const stages = [
+                    { stage: '01', name: 'Mempool & Queue', desc: 'Web nondet input resolution' },
+                    { stage: '02', name: 'Leader Proposal', desc: 'Deterministic AST execution' },
+                    { stage: '03', name: 'Commit Phase', desc: 'Cryptographic hash commitment' },
+                    { stage: '04', name: 'Vote Revelation', desc: 'Byzantine majority agreement' },
+                    { stage: '05', name: 'Finalization', desc: 'Contract storage state committed' },
+                  ]
+
+                  return (
+                    <div className="space-y-2 mt-2">
+                      {stages.map((s, idx) => {
+                        const isCurrent = idx === currentIdx
+                        const isDone = idx < currentIdx
+                        const badgeText = isDone ? 'DONE' : isCurrent ? 'RUNNING' : 'QUEUED'
+                        const badgeClass = isDone
+                          ? 'bg-emerald-950/30 text-emerald-400 border-emerald-800/40'
+                          : isCurrent
+                          ? 'bg-cyan-950/40 text-cyan-400 border-cyan-500/40 animate-pulse'
+                          : 'bg-slate-900/40 text-slate-600 border-slate-800/40'
+                        const numClass = isDone ? 'text-emerald-400' : isCurrent ? 'text-cyan-400' : 'text-slate-600'
+                        const titleClass = isCurrent ? 'text-white font-bold' : isDone ? 'text-slate-300' : 'text-slate-500'
+
+                        return (
+                          <div key={s.stage} className={`validator-list-item ${isCurrent ? 'border-cyan-500/30 bg-cyan-950/10' : ''}`}>
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className={`font-mono text-[9px] font-bold ${numClass}`}>{s.stage}</span>
+                              <div className="truncate">
+                                <div className={`font-mono text-[9px] truncate ${titleClass}`}>{s.name}</div>
+                                <div className="font-mono text-[8px] text-slate-500 truncate">{s.desc}</div>
+                              </div>
+                            </div>
+                            <span className={`font-mono text-[8px] px-1.5 py-0.5 rounded border flex-shrink-0 ${badgeClass}`}>{badgeText}</span>
+                          </div>
+                        )
+                      })}
                     </div>
-                    <div className="text-slate-500 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
-                      <span>Awaiting Byzantine consensus...</span>
-                    </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {currentResult && !busy && (() => {
                   const score = Math.round(currentResult.riskScore)
@@ -508,21 +541,21 @@ export default function App() {
                 {!busy && !currentResult && (
                   <div className="space-y-2 mt-2">
                     {[
-                      { stage: '01', name: 'Mempool & Queue', desc: 'Web nondet input resolution', status: 'ACTIVE' },
-                      { stage: '02', name: 'Leader Proposal', desc: 'Deterministic AST execution', status: 'ACTIVE' },
-                      { stage: '03', name: 'Commit Phase', desc: 'Cryptographic hash commitment', status: 'ACTIVE' },
-                      { stage: '04', name: 'Vote Revelation', desc: 'Byzantine majority agreement', status: 'ACTIVE' },
-                      { stage: '05', name: 'Finalization', desc: 'Contract storage state committed', status: 'ACTIVE' },
+                      { stage: '01', name: 'Mempool & Queue', desc: 'Web nondet input resolution' },
+                      { stage: '02', name: 'Leader Proposal', desc: 'Deterministic AST execution' },
+                      { stage: '03', name: 'Commit Phase', desc: 'Cryptographic hash commitment' },
+                      { stage: '04', name: 'Vote Revelation', desc: 'Byzantine majority agreement' },
+                      { stage: '05', name: 'Finalization', desc: 'Contract storage state committed' },
                     ].map(s => (
-                      <div key={s.stage} className="validator-list-item">
+                      <div key={s.stage} className="validator-list-item opacity-60 border-slate-900/60 bg-slate-950/20">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className="font-mono text-[9px] text-cyan-400 font-bold">{s.stage}</span>
+                          <span className="font-mono text-[9px] text-slate-600 font-bold">{s.stage}</span>
                           <div className="truncate">
-                            <div className="font-mono text-[9px] font-bold text-slate-300 truncate">{s.name}</div>
-                            <div className="font-mono text-[8px] text-slate-500 truncate">{s.desc}</div>
+                            <div className="font-mono text-[9px] font-bold text-slate-400 truncate">{s.name}</div>
+                            <div className="font-mono text-[8px] text-slate-600 truncate">{s.desc}</div>
                           </div>
                         </div>
-                        <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-cyan-950/30 text-cyan-400 border border-cyan-950/40 flex-shrink-0">{s.status}</span>
+                        <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-slate-900/60 text-slate-500 border border-slate-800/60 flex-shrink-0">STANDBY</span>
                       </div>
                     ))}
                   </div>
