@@ -98,52 +98,54 @@ export default function App() {
     <div className="min-h-screen bg-mesh-canvas text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
       
       {/* ── TOP LUXURY NAVIGATION BAR ── */}
-      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/75 backdrop-blur-xl px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-        {/* Brand identity */}
-        <div className="flex items-center gap-3">
-          <div className="relative w-9 h-9 rounded-xl overflow-hidden border border-cyan-500/30 p-0.5 bg-slate-900 shadow-[0_0_16px_rgba(0,242,254,0.25)] flex-shrink-0">
-            <img src="/logo.jpg" alt="ScamShield Logo" className="w-full h-full object-cover rounded-lg" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-display font-black text-sm tracking-wider text-white">
-                SCAM<span className="text-cyan-400">SHIELD</span>
-              </span>
-              <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
-                AI
-              </span>
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-slate-300">
-                <span className={`w-1.5 h-1.5 rounded-full ${busy ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400'}`} />
-                {currentUiState}
-              </span>
+      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 sm:px-6 lg:px-8 py-3.5">
+        <div className="w-full max-w-[1720px] mx-auto flex items-center justify-between gap-4">
+          {/* Brand identity */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-9 h-9 rounded-xl overflow-hidden border border-cyan-500/30 p-0.5 bg-slate-900 shadow-[0_0_16px_rgba(0,242,254,0.25)] flex-shrink-0">
+              <img src="/logo.jpg" alt="ScamShield Logo" className="w-full h-full object-cover rounded-lg" />
             </div>
-            <p className="text-[10px] font-mono text-slate-500 hidden sm:block">
-              GenLayer Intelligent Contract Security Oracle
-            </p>
-          </div>
-        </div>
-
-        {/* Real Network Telemetry & Wallet Header Controls */}
-        <div className="flex items-center gap-3">
-          <div className="hidden lg:flex items-center gap-4 text-xs font-mono border-r border-slate-800 pr-4">
             <div>
-              <div className="text-[9px] text-slate-500 uppercase font-bold">Network</div>
-              <div className="text-slate-200 font-semibold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                Studionet (61999)
+              <div className="flex items-center gap-2">
+                <span className="font-display font-black text-sm tracking-wider text-white">
+                  SCAM<span className="text-cyan-400">SHIELD</span>
+                </span>
+                <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 border border-cyan-400/30">
+                  AI
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-slate-300">
+                  <span className={`w-1.5 h-1.5 rounded-full ${busy ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400'}`} />
+                  {currentUiState}
+                </span>
+              </div>
+              <p className="text-[10px] font-mono text-slate-500 hidden sm:block">
+                GenLayer Intelligent Contract Security Oracle
+              </p>
+            </div>
+          </div>
+
+          {/* Real Network Telemetry & Wallet Header Controls */}
+          <div className="flex items-center gap-3">
+            <div className="hidden lg:flex items-center gap-4 text-xs font-mono border-r border-slate-800 pr-4">
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Network</div>
+                <div className="text-slate-200 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  Studionet (61999)
+                </div>
+              </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Consensus</div>
+                <div className="text-slate-200 font-semibold">BFT Multi-Agent</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Session History</div>
+                <div className="text-slate-200 font-semibold">{recentScans.length} Scanned • {riskyScans.length} Flagged</div>
               </div>
             </div>
-            <div>
-              <div className="text-[9px] text-slate-500 uppercase font-bold">Consensus</div>
-              <div className="text-slate-200 font-semibold">BFT Multi-Agent</div>
-            </div>
-            <div>
-              <div className="text-[9px] text-slate-500 uppercase font-bold">Session History</div>
-              <div className="text-slate-200 font-semibold">{recentScans.length} Scanned • {riskyScans.length} Flagged</div>
-            </div>
-          </div>
 
-          <WalletConnect wallet={wallet} onConnect={connect} onDisconnect={disconnect} />
+            <WalletConnect wallet={wallet} onConnect={connect} onDisconnect={disconnect} />
+          </div>
         </div>
       </header>
 
@@ -166,7 +168,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* ── MAIN RESPONSIVE SECURITY CANVAS ── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="flex-1 w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* ── LEFT PANEL: SEARCH CONSOLE & SESSION LOGS (Col 1-4) ── */}
         <div className="lg:col-span-4 flex flex-col gap-6">
@@ -508,28 +510,30 @@ export default function App() {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-auto text-center text-xs font-mono text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div>
-          ScamShield AI • Powered by GenLayer Intelligent Contracts & Decentralized Validators
-        </div>
-        <div className="flex items-center gap-4">
-          <a
-            href="https://studio.genlayer.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-cyan-400 transition-colors"
-          >
-            GenLayer Studio
-          </a>
-          <span>•</span>
-          <a
-            href="https://github.com/YousufAziz1/scamshield"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-cyan-400 transition-colors"
-          >
-            GitHub
-          </a>
+      <footer className="border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-auto text-xs font-mono text-slate-500">
+        <div className="w-full max-w-[1720px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div>
+            ScamShield AI • Powered by GenLayer Intelligent Contracts & Decentralized Validators
+          </div>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://studio.genlayer.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-cyan-400 transition-colors"
+            >
+              GenLayer Studio
+            </a>
+            <span>•</span>
+            <a
+              href="https://github.com/YousufAziz1/scamshield"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-cyan-400 transition-colors"
+            >
+              GitHub
+            </a>
+          </div>
         </div>
       </footer>
     </div>
