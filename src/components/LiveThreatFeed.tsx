@@ -161,7 +161,9 @@ export function LiveThreatFeed({ busy, scanStatus, txHash, tokenAddress, chainId
       meta: txHash ? `Tx: ${txHash.slice(0, 10)}...` : undefined,
     }
 
-    setItems(prev => [...prev.slice(-40), item])
+    setTimeout(() => {
+      setItems(prev => [...prev.slice(-40), item])
+    }, 0)
   }, [scanStatus, busy, txHash, tokenAddress, chainId])
 
   // Auto-scroll to bottom of stream

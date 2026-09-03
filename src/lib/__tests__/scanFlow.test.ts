@@ -379,5 +379,157 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     expect(serializedVotes).not.toContain('SHIELD-NODE')
     expect(result.current.scanState.result?.evidenceSufficiency).toBe('INSUFFICIENT')
   })
+
+  // ── 11. RALLY NFT REGRESSION TEST ──────────────────────────────────────────
+  it('Rally NFT (Ethereum 0x5510cd555b0ae386b420421a7ad98c6785499983) resolves to Wingston by Rally (WNGST) and NEVER Solayer / LAYER', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_rally')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'MAJORITY_AGREE',
+      last_round: {
+        round_validators: ['0x2222222222222222222222222222222222222222'],
+        validator_votes_name: ['AGREE'],
+      },
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        verdict: 'SAFE',
+        riskScore: 10,
+        tokenIdentity: { name: 'Wingston by Rally', symbol: 'WNGST', chain: 'ethereum' },
+        summary: 'Wingston by Rally verified NFT contract on Ethereum.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    const tokenName = result.current.scanState.result?.realTokenData?.name || result.current.scanState.result?.tokenIdentity?.name
+    const tokenSymbol = result.current.scanState.result?.realTokenData?.symbol || result.current.scanState.result?.tokenIdentity?.symbol
+
+    expect(tokenName).toContain('Wingston by Rally')
+    expect(tokenSymbol).toBe('WNGST')
+    expect(tokenName).not.toContain('Solayer')
+    expect(tokenSymbol).not.toContain('LAYER')
+  })
+
+  // ── 12. CHAIN-BOUNDING EVIDENCE & MATERIAL EQUIVALENCE ─────────────────────
+  it('rejects cross-chain evidence substitution and strictly bounds tokens to requested chain', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    // Mock DexScreener returning pairs for BSC, but user requested Ethereum
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('dexscreener.com')) {
+        return {
+          ok: true,
+          json: async () => ({
+            pairs: [
+              {
+                chainId: 'bsc',
+                baseToken: { name: 'Fake Mismatched Token', symbol: 'FAKE', address: '0x9999999999999999999999999999999999999999' },
+                priceUsd: '10.0',
+                liquidity: { usd: 100000 },
+              },
+            ],
+          }),
+        }
+      }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_chain_check')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'MAJORITY_AGREE',
+      last_round: {
+        round_validators: ['0x3333333333333333333333333333333333333333'],
+        validator_votes_name: ['AGREE'],
+      },
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        verdict: 'UNKNOWN',
+        riskScore: 50,
+        evidenceSufficiency: 'INSUFFICIENT',
+        summary: 'Target address has no valid pool on Ethereum. Cross-chain pair on BSC was discarded.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken('0x9999999999999999999999999999999999999999', 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    // Must NOT adopt the BSC token's identity when scanning on Ethereum
+    expect(result.current.scanState.result?.realTokenData?.isVerified).toBe(false)
+    expect(result.current.scanState.result?.realTokenData?.name).not.toBe('Fake Mismatched Token')
+    expect(result.current.scanState.result?.verdict).toBe('UNKNOWN')
+    expect(result.current.scanState.result?.evidenceSufficiency).toBe('INSUFFICIENT')
+  })
+
+  // ── 13. REAL TELEMETRY ONLY & NO FABRICATED CONFIDENCE ─────────────────────
+  it('extracts real GenLayer transaction telemetry and exposes truthful fields without fake confidence', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xreal_tx_telemetry')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'MAJORITY_AGREE',
+      num_of_rounds: 2,
+      last_round: {
+        round_validators: ['0x4444444444444444444444444444444444444444', '0x5555555555555555555555555555555555555555'],
+        validator_votes_name: ['AGREE', 'AGREE'],
+        votes_committed: 2,
+        votes_revealed: 2,
+      },
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        verdict: 'SAFE',
+        riskScore: 5,
+        summary: 'Contract verified with clean code standards.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    const telemetry = result.current.scanState.result?.telemetry
+    expect(telemetry?.roundsExecuted).toBe(2)
+    expect(telemetry?.votesCommitted).toBe(2)
+    expect(telemetry?.votesRevealed).toBe(2)
+    expect(telemetry?.resultName).toBe('MAJORITY_AGREE')
+    expect(result.current.scanState.result?.validatorVotes).toHaveLength(2)
+    expect(result.current.scanState.result?.validatorVotes?.[0].validatorAddress).toBe('0x4444444444444444444444444444444444444444')
+  })
 })
 

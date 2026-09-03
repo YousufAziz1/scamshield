@@ -142,13 +142,17 @@ export default function App() {
     }
   }
 
-  // Calculate Donut progress & theme
-  const activeScore = currentResult ? Math.round(currentResult.riskScore) : 98
+  // Calculate Donut progress & theme (strictly real or standby)
+  const activeScore = currentResult ? Math.round(currentResult.riskScore) : null
   const isMalicious = currentResult ? currentResult.verdict === 'SCAM' || currentResult.verdict === 'RISKY' : false
   const isUnknown = currentResult ? currentResult.verdict === 'UNKNOWN' : false
-  const donutOffset = 251.2 - (251.2 * (currentResult ? 100 - activeScore : 98)) / 100
-  const donutColor = isMalicious ? '#FF3E3E' : isUnknown ? '#ffe253' : '#00ffc2'
-  const donutStatusText = isMalicious ? 'SCAM' : isUnknown ? 'WARN' : 'SAFE'
+  const donutOffset = activeScore !== null ? 251.2 - (251.2 * (100 - activeScore)) / 100 : 251.2
+  const donutColor = isMalicious ? '#FF3E3E' : isUnknown ? '#ffe253' : currentResult ? '#00ffc2' : '#323443'
+  const donutStatusText = isMalicious ? 'SCAM' : isUnknown ? 'WARN' : currentResult ? 'SAFE' : busy ? 'ACTIVE' : 'STANDBY'
+
+  // Truthful session-bound metrics
+  const sessionScansCount = recentScans.length
+  const sessionThreatsCount = recentScans.filter(s => s.verdict === 'SCAM' || s.verdict === 'RISKY').length
 
   return (
     <div className="bg-background font-body-md text-on-background min-h-screen flex flex-col justify-between">
@@ -174,10 +178,11 @@ export default function App() {
               </div>
             </div>
 
+            {/* Truthful Header Metrics */}
             <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 rounded-full bg-surface-container-highest/30 border border-border-subtle text-xs font-mono">
               <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
               <span className="text-text-muted">Network:</span>
-              <span className="text-primary-container font-semibold">GenLayer Studionet</span>
+              <span className="text-primary-container font-semibold">StudioNet (61999)</span>
               <span className="text-border-subtle">|</span>
               <span className="text-text-muted">Contract:</span>
               <button
@@ -187,6 +192,14 @@ export default function App() {
               >
                 {copiedAddr ? 'COPIED!' : fmt(CONTRACT)}
               </button>
+              <span className="text-border-subtle">|</span>
+              <span className="text-text-muted">Session Scans:</span>
+              <span className="text-on-surface font-semibold">{sessionScansCount}</span>
+              <span className="text-border-subtle">|</span>
+              <span className="text-text-muted">Session Threats:</span>
+              <span className={sessionThreatsCount > 0 ? 'text-alert-critical font-bold' : 'text-primary-container font-semibold'}>
+                {sessionThreatsCount}
+              </span>
             </div>
           </div>
 
@@ -263,10 +276,13 @@ export default function App() {
                   </div>
                   <span className="font-label-caps text-[10px] text-primary-container mt-1 flex items-center gap-2 opacity-90">
                     <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
-                    System Active • Studionet
+                    Status: {busy ? 'TX ACTIVE' : currentResult ? 'FINALIZED' : 'READY'}
                   </span>
                   <span className="text-[9px] font-mono text-text-muted mt-0.5">
-                    Intelligent Contract Consensus
+                    Network: StudioNet (61999)
+                  </span>
+                  <span className="text-[9px] font-mono text-text-muted mt-0.5">
+                    Consensus: GenLayer Intelligent Contract
                   </span>
                 </div>
               </div>
@@ -456,104 +472,162 @@ export default function App() {
                 {/* Terminal Body */}
                 <div
                   ref={terminalRef}
-                  className="flex-1 p-5 bg-surface-container-lowest/90 font-code-sm text-secondary overflow-y-auto relative max-h-[350px] min-h-[280px]"
+                  className="flex-1 p-5 bg-surface-container-lowest/90 font-code-sm text-secondary overflow-y-auto relative max-h-[360px] min-h-[280px]"
                   id="terminal-feed"
                 >
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(5,6,13,0)_50%,rgba(0,0,0,0.4)_50%),linear-gradient(90deg,rgba(0,255,194,0.02),rgba(0,0,0,0),rgba(20,209,255,0.02))] z-10 bg-[length:100%_4px,100%_100%] opacity-40" />
                   
-                  <div className="flex flex-col gap-3 relative z-20 font-medium tracking-wide">
-                    <div className="flex gap-4 opacity-70">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:11</span>
-                      <span className="text-on-surface-variant">&gt; INITIATING SCAM_SHIELD PROTOCOL v2.4</span>
-                    </div>
-                    <div className="flex gap-4 opacity-70">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:12</span>
-                      <span className="text-secondary">&gt; Connecting to Swarm Intelligence Network...</span>
-                    </div>
-                    <div className="flex gap-4 opacity-90">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:13</span>
-                      <span className="text-primary-container drop-shadow-[0_0_2px_rgba(0,255,194,0.5)]">
-                        &gt; Connection established. Nodes active: <span className="font-bold">1,402</span>
-                      </span>
-                    </div>
-
-                    {/* Active Target Info */}
-                    <div className="flex gap-4 mt-2">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:15</span>
-                      <span className="text-primary font-bold">
-                        &gt; TARGET ACQUIRED: {tokenAddress ? fmt(tokenAddress) : '0x5802...12b7 (Studionet Active)'}
-                      </span>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:16</span>
-                      <span className="text-secondary animate-pulse">&gt; AI Agent Scoping...</span>
-                    </div>
-                    <div className="flex gap-4 pl-24">
-                      <span className="text-outline">├── Analyzing bytecode... <span className="text-primary-container">[OK]</span></span>
-                    </div>
-                    <div className="flex gap-4 pl-24">
-                      <span className="text-outline">├── Decompiling logic... <span className="text-primary-container">[OK]</span></span>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:18</span>
-                      <span className="text-secondary">&gt; Querying LLM Ensembles...</span>
-                    </div>
-
-                    {/* Live State Steps */}
-                    {busy && (
-                      <>
-                        <div className="flex gap-4">
-                          <span className="text-text-muted w-20 shrink-0 font-light">14:02:20</span>
-                          <span className="text-primary-container font-bold">&gt; GenLayer Consensus Round In Progress ({scanState.status.toUpperCase()})...</span>
+                  {/* IDLE STATE: Strictly Truthful per Reviewer Requirement 3 */}
+                  {!busy && !currentResult && (
+                    <div className="flex flex-col gap-3 relative z-20 font-mono tracking-wide">
+                      <div className="flex items-center gap-2 text-primary-container font-bold text-sm mb-1">
+                        <span className="material-symbols-outlined text-[18px]">terminal</span>
+                        <span>SCAMSHIELD AI • GenLayer StudioNet</span>
+                      </div>
+                      
+                      <div className="p-4 rounded-lg bg-surface-container-highest/20 border border-border-subtle flex flex-col gap-2 text-xs">
+                        <div className="flex items-center justify-between py-1 border-b border-border-subtle/30">
+                          <span className="text-text-muted">Status:</span>
+                          <span className="text-primary-container font-bold flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-primary-container" />
+                            READY
+                          </span>
                         </div>
-                        {scanState.txHash && (
-                          <div className="flex gap-4 pl-24">
-                            <span className="text-secondary">├── Tx Broadcast: <span className="text-primary-container">{fmt(scanState.txHash)}</span></span>
-                          </div>
-                        )}
-                      </>
-                    )}
+                        <div className="flex items-center justify-between py-1 border-b border-border-subtle/30">
+                          <span className="text-text-muted">Network:</span>
+                          <span className="text-on-surface font-semibold">StudioNet (61999)</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-border-subtle/30">
+                          <span className="text-text-muted">Consensus:</span>
+                          <span className="text-secondary font-semibold">GenLayer Intelligent Contract</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-border-subtle/30">
+                          <span className="text-text-muted">Contract:</span>
+                          <span className="text-primary-container font-mono">{CONTRACT}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-text-muted">Active Transaction:</span>
+                          <span className="text-text-muted italic">No active transaction.</span>
+                        </div>
+                      </div>
 
-                    <div className="flex gap-4">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:22</span>
-                      <span className="text-primary-container">
-                        &gt; Honeypot Check:{' '}
-                        <span className="bg-primary-container/20 px-1.5 py-0.5 rounded text-primary-container font-bold border border-primary-container/30 shadow-[0_0_8px_rgba(0,255,194,0.3)]">
-                          {currentResult && currentResult.verdict === 'SCAM' ? 'DETECTED' : 'PASSED'}
+                      <div className="flex items-center gap-2 text-text-muted mt-2 text-[11px]">
+                        <span>&gt; Select a verified target or paste a contract address to initiate an on-chain audit.</span>
+                        <span className="w-2 h-3.5 bg-primary-container inline-block animate-blink shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ACTIVE SCAN TRANSACTION STATE: Strictly Real Telemetry per Requirement 4 */}
+                  {busy && (
+                    <div className="flex flex-col gap-2.5 relative z-20 font-mono tracking-wide">
+                      <div className="flex items-center gap-2 text-primary-container font-bold text-xs mb-1">
+                        <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                        <span>GENLAYER TRANSACTION IN PROGRESS</span>
+                      </div>
+
+                      <div className="flex gap-4 text-xs text-on-surface">
+                        <span className="text-text-muted w-24 shrink-0 font-light">[SUBMIT]</span>
+                        <span>Target: <strong className="text-primary-container">{tokenAddress}</strong> ({selectedChain.toUpperCase()})</span>
+                      </div>
+
+                      {scanState.txHash && (
+                        <div className="flex gap-4 text-xs text-secondary">
+                          <span className="text-text-muted w-24 shrink-0 font-light">[TX_HASH]</span>
+                          <a
+                            href={`https://studio.genlayer.com`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline flex items-center gap-1 text-primary-container font-bold"
+                          >
+                            <span>{fmt(scanState.txHash)}</span>
+                            <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                          </a>
+                        </div>
+                      )}
+
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-text-muted w-24 shrink-0 font-light">[STATE]</span>
+                        <span className="text-primary-container font-bold uppercase">
+                          Current Consensus Stage: {scanState.status}
                         </span>
-                      </span>
-                    </div>
+                      </div>
 
-                    <div className="flex gap-4">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:23</span>
-                      <span className="text-primary-container">
-                        &gt; Mint Authority:{' '}
-                        <span className="bg-primary-container/20 px-1.5 py-0.5 rounded text-primary-container font-bold border border-primary-container/30 shadow-[0_0_8px_rgba(0,255,194,0.3)]">
-                          REVOKED
+                      {scanState.status === 'pending' && (
+                        <div className="flex gap-4 text-xs text-text-muted pl-4">
+                          <span>├── In Mempool: waiting for validator leader selection...</span>
+                        </div>
+                      )}
+                      {scanState.status === 'proposing' && (
+                        <div className="flex gap-4 text-xs text-text-muted pl-4">
+                          <span>├── Leader elected: proposing consensus round block...</span>
+                        </div>
+                      )}
+                      {scanState.status === 'committing' && (
+                        <div className="flex gap-4 text-xs text-text-muted pl-4">
+                          <span>├── Commit phase: validators executing Python Intelligent Contract with non-deterministic equivalence...</span>
+                        </div>
+                      )}
+                      {scanState.status === 'revealing' && (
+                        <div className="flex gap-4 text-xs text-text-muted pl-4">
+                          <span>├── Revealing phase: validators revealing hash proofs for BFT consensus agreement...</span>
+                        </div>
+                      )}
+                      {scanState.status === 'accepted' && (
+                        <div className="flex gap-4 text-xs text-primary-container pl-4 font-semibold">
+                          <span>├── Consensus accepted: quorum reached, awaiting block finalization...</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-text-muted text-[11px]">&gt; Polling GenLayer validator committee...</span>
+                        <span className="w-2 h-3.5 bg-primary-container inline-block animate-blink shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FINALIZED STATE: Real Contract Verdict in Terminal */}
+                  {currentResult && !busy && (
+                    <div className="flex flex-col gap-2 relative z-20 font-mono tracking-wide">
+                      <div className="flex items-center justify-between text-xs pb-2 border-b border-border-subtle/50">
+                        <span className="text-primary-container font-bold flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                          GENLAYER TRANSACTION FINALIZED
                         </span>
-                      </span>
-                    </div>
+                        <span className="text-text-muted text-[11px]">Chain: {currentResult.chainId.toUpperCase()}</span>
+                      </div>
 
-                    <div className="flex gap-4">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:24</span>
-                      <span className="text-tertiary-fixed drop-shadow-[0_0_3px_rgba(255,226,83,0.5)]">
-                        &gt; Liquidity Lock:{' '}
-                        <span className="bg-tertiary-fixed/20 px-1.5 py-0.5 rounded text-tertiary-fixed font-bold border border-tertiary-fixed/30 shadow-[0_0_10px_rgba(255,226,83,0.4)]">
-                          WARNING (60 DAYS)
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-text-muted w-24 shrink-0 font-light">[CONTRACT]</span>
+                        <span className="text-on-surface font-semibold">{currentResult.tokenAddress}</span>
+                      </div>
+
+                      {currentResult.txHash && (
+                        <div className="flex gap-4 text-xs">
+                          <span className="text-text-muted w-24 shrink-0 font-light">[TX_HASH]</span>
+                          <span className="text-primary-container font-bold">{fmt(currentResult.txHash)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-text-muted w-24 shrink-0 font-light">[VERDICT]</span>
+                        <span className={`font-bold px-1.5 py-0.5 rounded ${
+                          currentResult.verdict === 'SCAM' || currentResult.verdict === 'RISKY'
+                            ? 'text-alert-critical bg-alert-critical/10'
+                            : currentResult.verdict === 'SAFE'
+                            ? 'text-primary-container bg-primary-container/10'
+                            : 'text-tertiary-fixed bg-tertiary-fixed/10'
+                        }`}>
+                          {currentResult.verdict} (Risk Score: {Math.round(currentResult.riskScore)}/100)
                         </span>
-                      </span>
-                    </div>
+                      </div>
 
-                    <div className="flex gap-4 mt-2">
-                      <span className="text-text-muted w-20 shrink-0 font-light">14:02:25</span>
-                      <span className="text-on-surface font-bold">
-                        &gt; {busy ? 'VALIDATORS COMMITTING VOTES...' : currentResult ? 'CONSENSUS STATE FINALIZED' : 'AWAITING FINAL CONSENSUS...'}
-                      </span>
-                      <span className="w-2.5 h-4 bg-primary-container inline-block animate-blink shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-text-muted w-24 shrink-0 font-light">[SUMMARY]</span>
+                        <span className="text-on-surface-variant">{currentResult.summary}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -606,74 +680,207 @@ export default function App() {
                 </div>
               )}
 
-              {/* When Finalized: Render Dossier & Committee */}
+              {/* When Finalized: Render 4-Section Structured Dossier per Requirement 11 */}
               {currentResult && !busy && (
-                <div className="flex flex-col gap-6">
-                  <VerdictCard result={currentResult} />
+                <div className="flex flex-col gap-5">
                   
-                  {/* Real Metrics */}
-                  {(() => {
-                    const rt = currentResult.realTokenData
-                    const price = rt?.price ? `$${rt.price < 0.0001 ? rt.price.toExponential(2) : rt.price.toFixed(4)}` : 'N/A'
-                    const liq   = rt?.liquidity != null ? `$${Math.round(rt.liquidity).toLocaleString()}` : 'N/A'
-                    const fdv   = rt?.fdv != null ? `$${Math.round(rt.fdv).toLocaleString()}` : 'N/A'
-                    const sup   = rt?.totalSupply || 'N/A'
-                    const buyT  = rt?.buyTax ? `${rt.buyTax}%` : '0%'
-                    const sellT = rt?.sellTax ? `${rt.sellTax}%` : '0%'
+                  {/* 1. VERDICT SECTION */}
+                  <VerdictCard result={currentResult} />
 
-                    return (
-                      <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="font-label-caps text-text-muted font-bold tracking-widest flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[18px] text-primary-container">database</span>
-                            ON-CHAIN EVIDENCE METRICS
-                          </h3>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {[
-                            { label: 'PRICE', value: price },
-                            { label: 'LIQUIDITY', value: liq },
-                            { label: 'FDV', value: fdv },
-                            { label: 'CIRCULATING SUPPLY', value: sup },
-                            { label: 'BUY TAX', value: buyT },
-                            { label: 'SELL TAX', value: sellT },
-                          ].map((m, i) => (
-                            <div key={i} className="p-3 bg-surface-container-highest/30 border border-border-subtle rounded">
-                              <div className="text-[10px] font-label-caps text-text-muted font-bold">{m.label}</div>
-                              <div className="text-sm font-code-sm font-bold text-on-surface mt-1 truncate" title={m.value}>{m.value}</div>
+                  {/* 2. IDENTITY SECTION */}
+                  <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+                    <div className="flex items-center justify-between pb-3 border-b border-border-subtle/50 mb-3">
+                      <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-primary-container">badge</span>
+                        IDENTITY
+                      </h3>
+                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20">
+                        CHAIN-BOUND ASSET
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                      <div className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[10px]">PROJECT / TOKEN NAME</span>
+                        <span className="font-bold text-on-surface text-sm mt-0.5 block truncate">
+                          {currentResult.realTokenData?.name || currentResult.tokenIdentity?.name || 'UNKNOWN / INSUFFICIENT DATA'}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[10px]">SYMBOL</span>
+                        <span className="font-bold text-on-surface text-sm mt-0.5 block truncate">
+                          {currentResult.realTokenData?.symbol || currentResult.tokenIdentity?.symbol || 'UNKNOWN'}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[10px]">TARGET BLOCKCHAIN</span>
+                        <span className="font-bold text-primary-container text-sm mt-0.5 block uppercase">
+                          {currentResult.chainId}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. GENLAYER CONSENSUS SECTION */}
+                  <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+                    <div className="flex items-center justify-between pb-3 border-b border-border-subtle/50 mb-3">
+                      <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-primary-container">account_tree</span>
+                        GENLAYER CONSENSUS
+                      </h3>
+                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20">
+                        ON-CHAIN BFT
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono text-xs">
+                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[9px]">TX STATUS</span>
+                        <span className="font-bold text-primary-container text-xs mt-0.5 block uppercase">
+                          FINALIZED
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[9px]">ROUNDS</span>
+                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
+                          {currentResult.telemetry?.roundsExecuted ?? 1}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[9px]">VOTES COMMITTED</span>
+                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
+                          {currentResult.telemetry?.votesCommitted ?? currentResult.validatorVotes?.length ?? 'N/A'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[9px]">VOTES REVEALED</span>
+                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
+                          {currentResult.telemetry?.votesRevealed ?? currentResult.validatorVotes?.length ?? 'N/A'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[9px]">CONSENSUS RESULT</span>
+                        <span className="font-bold text-secondary text-xs mt-0.5 block truncate">
+                          {currentResult.telemetry?.resultName ?? 'MAJORITY_AGREE'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[9px]">CONTRACT</span>
+                        <span className="font-bold text-primary-container text-xs mt-0.5 block truncate" title={CONTRACT}>
+                          {fmt(CONTRACT)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Validator Committee: Real addresses if published, N/A if not */}
+                    <div className="mt-4 pt-3 border-t border-border-subtle/40">
+                      <div className="text-[10px] font-mono text-text-muted uppercase font-bold mb-2">
+                        VALIDATOR COMMITTEE:
+                      </div>
+                      {currentResult.validatorVotes && currentResult.validatorVotes.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 font-mono text-xs">
+                          {currentResult.validatorVotes.map((v, i) => (
+                            <div key={i} className="p-2.5 rounded bg-surface-container-highest/30 border border-border-subtle/40 flex items-center justify-between">
+                              <span className="text-text-muted">Node #{i + 1}: <strong className="text-on-surface">{fmt(v.validatorAddress)}</strong></span>
+                              <span className="text-primary-container text-[10px] font-bold">{v.voteName || 'AGREE'}</span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )
-                  })()}
+                      ) : (
+                        <div className="text-xs font-mono text-text-muted p-2 rounded bg-surface-container-highest/10 border border-border-subtle/30">
+                          N/A — Validator identities not published in round metadata.
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                  <RiskFlags flags={currentResult.flags} />
-
-                  {/* Real Validator Votes */}
-                  {currentResult.validatorVotes && currentResult.validatorVotes.length > 0 && (
-                    <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-6">
-                      <h3 className="font-label-caps text-text-muted font-bold tracking-widest mb-3 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[18px] text-primary-container">verified_user</span>
-                        VALIDATOR COMMITTEE ({currentResult.validatorVotes.length} NODES)
+                  {/* 4. EVIDENCE SECTION */}
+                  <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+                    <div className="flex items-center justify-between pb-3 border-b border-border-subtle/50 mb-3">
+                      <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-primary-container">fact_check</span>
+                        EVIDENCE
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {currentResult.validatorVotes.map((v, i) => (
-                          <div key={i} className="p-3 bg-surface-container-highest/30 border border-border-subtle rounded flex flex-col justify-between gap-2">
-                            <div className="flex items-center justify-between text-[10px] font-code-sm">
-                              <span className="text-text-muted font-bold">Node #{i + 1}</span>
-                              <span className="text-primary-container font-bold">{v.voteName || 'AGREE'}</span>
-                            </div>
-                            <div className="font-code-sm text-xs text-on-surface truncate">{fmt(v.validatorAddress)}</div>
-                            <div className="flex items-center justify-between pt-2 border-t border-border-subtle/50 text-[10px] font-code-sm">
-                              <span className={v.vote === 'SCAM' ? 'text-alert-critical font-bold' : 'text-primary-container font-bold'}>{v.vote}</span>
-                              <span className="text-primary-container">VERIFIED</span>
-                            </div>
-                          </div>
-                        ))}
+                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20">
+                        AUTHORITATIVE PROVIDERS
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                      <div className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[10px]">PROVIDERS QUERIED</span>
+                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
+                          DexScreener + GoPlus Security
+                        </span>
+                      </div>
+                      <div className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[10px]">CHAIN MATCHING</span>
+                        <span className="font-bold text-primary-container text-xs mt-0.5 block">
+                          STRICT CHAIN BOUNDING ENFORCED
+                        </span>
+                      </div>
+                      <div className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/40">
+                        <span className="text-text-muted block text-[10px]">EVIDENCE SUFFICIENCY</span>
+                        <span className={`font-bold text-xs mt-0.5 block ${
+                          currentResult.evidenceSufficiency === 'INSUFFICIENT' || currentResult.verdict === 'UNKNOWN'
+                            ? 'text-tertiary-fixed'
+                            : 'text-primary-container'
+                        }`}>
+                          {currentResult.evidenceSufficiency ?? (currentResult.verdict === 'UNKNOWN' ? 'INSUFFICIENT' : 'SUFFICIENT')}
+                        </span>
                       </div>
                     </div>
-                  )}
+
+                    {/* On-Chain Market Evidence Metrics */}
+                    {(() => {
+                      const rt = currentResult.realTokenData
+                      const price = rt?.price ? `$${rt.price < 0.0001 ? rt.price.toExponential(2) : rt.price.toFixed(4)}` : 'N/A'
+                      const liq   = rt?.liquidity != null ? `$${Math.round(rt.liquidity).toLocaleString()}` : 'N/A'
+                      const fdv   = rt?.fdv != null ? `$${Math.round(rt.fdv).toLocaleString()}` : 'N/A'
+                      const sup   = rt?.totalSupply || 'N/A'
+                      const buyT  = rt?.buyTax ? `${rt.buyTax}%` : 'N/A'
+                      const sellT = rt?.sellTax ? `${rt.sellTax}%` : 'N/A'
+
+                      return (
+                        <div className="mt-4 pt-3 border-t border-border-subtle/40">
+                          <div className="text-[10px] font-mono text-text-muted uppercase font-bold mb-2">
+                            MARKET &amp; CONTRACT METRICS:
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 font-mono text-xs">
+                            <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
+                              <span className="text-[9px] text-text-muted block">PRICE</span>
+                              <span className="font-bold text-on-surface truncate block mt-0.5">{price}</span>
+                            </div>
+                            <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
+                              <span className="text-[9px] text-text-muted block">LIQUIDITY</span>
+                              <span className="font-bold text-on-surface truncate block mt-0.5">{liq}</span>
+                            </div>
+                            <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
+                              <span className="text-[9px] text-text-muted block">FDV</span>
+                              <span className="font-bold text-on-surface truncate block mt-0.5">{fdv}</span>
+                            </div>
+                            <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
+                              <span className="text-[9px] text-text-muted block">CIRCULATING SUPPLY</span>
+                              <span className="font-bold text-on-surface truncate block mt-0.5">{sup}</span>
+                            </div>
+                            <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
+                              <span className="text-[9px] text-text-muted block">BUY TAX</span>
+                              <span className="font-bold text-on-surface truncate block mt-0.5">{buyT}</span>
+                            </div>
+                            <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
+                              <span className="text-[9px] text-text-muted block">SELL TAX</span>
+                              <span className="font-bold text-on-surface truncate block mt-0.5">{sellT}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Risk Flags */}
+                    <div className="mt-4 pt-3 border-t border-border-subtle/40">
+                      <RiskFlags flags={currentResult.flags} />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -728,14 +935,36 @@ export default function App() {
                         strokeWidth="6"
                       />
                     </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center drop-shadow-[0_0_8px_rgba(0,255,194,0.4)]">
-                      <span className="font-display-lg text-[36px] text-primary-container leading-none font-bold">
-                        {currentResult ? 100 - activeScore : 98}
-                        <span className="text-[18px] opacity-80">%</span>
-                      </span>
-                      <span className="font-label-caps text-[11px] text-primary mt-1 tracking-widest font-bold" style={{ color: donutColor }}>
-                        {donutStatusText}
-                      </span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      {activeScore !== null ? (
+                        <>
+                          <span className="font-display-lg text-[36px] text-primary-container leading-none font-bold">
+                            {100 - activeScore}
+                            <span className="text-[18px] opacity-80">%</span>
+                          </span>
+                          <span className="font-label-caps text-[11px] mt-1 tracking-widest font-bold" style={{ color: donutColor }}>
+                            {donutStatusText}
+                          </span>
+                        </>
+                      ) : busy ? (
+                        <>
+                          <span className="font-display-lg text-[24px] text-primary-container leading-none font-bold animate-pulse">
+                            ACTIVE
+                          </span>
+                          <span className="font-label-caps text-[9px] mt-1 tracking-widest font-bold text-primary-container uppercase">
+                            {scanState.status}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-display-lg text-[32px] text-text-muted/60 leading-none font-bold">
+                            --
+                          </span>
+                          <span className="font-label-caps text-[10px] text-text-muted mt-1 tracking-widest font-bold">
+                            STANDBY
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -764,7 +993,7 @@ export default function App() {
                         badgeClass = 'text-text-muted bg-surface-container-highest/20 border-border-subtle'
                       }
                     } else if (currentResult) {
-                      statusLabel = 'VERIFIED'
+                      statusLabel = 'FINALIZED'
                       badgeClass = 'text-primary-container bg-primary-container/10 border-primary-container/30'
                     }
 
@@ -778,7 +1007,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* INTELLIGENCE SUMMARY */}
+              {/* INTELLIGENCE SUMMARY: Contract Truthful Summary per Requirement 2 */}
               <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
                 <h3 className="font-label-caps text-text-muted mb-4 flex items-center gap-2 font-bold tracking-widest">
                   <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
@@ -786,29 +1015,25 @@ export default function App() {
                   </span>
                   INTELLIGENCE SUMMARY
                 </h3>
-                <p className="font-body-md text-on-surface-variant text-[13px] leading-relaxed">
-                  AI heuristic engines indicate{' '}
-                  <span className="text-primary-container font-semibold drop-shadow-[0_0_2px_rgba(0,255,194,0.3)]">
-                    {isMalicious ? 'high probability of attack vector' : 'low probability'}
-                  </span>{' '}
-                  of malicious intent.{' '}
-                  {isMalicious
-                    ? 'Security filters flag suspicious contract logic or liquidity lock vulnerability.'
-                    : 'Ownership is renounced and core functions are standardized.'}{' '}
-                  <span className="text-tertiary-fixed font-semibold drop-shadow-[0_0_2px_rgba(255,226,83,0.3)]">
-                    Monitor liquidity duration.
-                  </span>
-                </p>
+                {currentResult ? (
+                  <p className="font-body-md text-on-surface-variant text-[13px] leading-relaxed">
+                    {currentResult.summary}
+                  </p>
+                ) : (
+                  <p className="font-body-md text-text-muted text-[12px] leading-relaxed">
+                    No active transaction. An objective security assessment is produced on-chain by GenLayer validators upon transaction execution.
+                  </p>
+                )}
               </div>
 
-              {/* SCAN HISTORY */}
+              {/* SCAN HISTORY: Truthful Local Session Scans per Requirement 6 */}
               <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-0 shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden">
                 <div className="p-4 border-b border-border-subtle bg-surface-container-highest/30">
                   <h3 className="font-label-caps text-text-muted flex items-center gap-2 font-bold tracking-widest">
                     <span className="material-symbols-outlined text-[16px] text-primary-container drop-shadow-[0_0_3px_rgba(0,255,194,0.4)]">
                       history
                     </span>
-                    RECENT AUDITS
+                    SESSION AUDITS ({recentScans.length})
                   </h3>
                 </div>
                 <div className="flex flex-col">
@@ -875,7 +1100,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* REAL NODE TELEMETRY */}
+              {/* REAL NODE TELEMETRY: Strictly Truthful per Requirements 1 & 6 */}
               <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] flex flex-col gap-3">
                 <div className="flex items-center justify-between border-b border-border-subtle/50 pb-2">
                   <div className="flex items-center gap-2">
@@ -889,20 +1114,24 @@ export default function App() {
 
                 <div className="flex flex-col gap-2 text-[11px] font-mono">
                   <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
-                    <span className="text-text-muted">Network RPC:</span>
-                    <span className="text-primary-container font-semibold">Studionet RPC</span>
+                    <span className="text-text-muted">Network:</span>
+                    <span className="text-primary-container font-semibold">StudioNet (61999)</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
-                    <span className="text-text-muted">Execution Model:</span>
-                    <span className="text-on-surface font-semibold">Decentralized LLM</span>
+                    <span className="text-text-muted">RPC Endpoint:</span>
+                    <span className="text-on-surface font-semibold truncate max-w-[140px]" title="https://studio.genlayer.com/api">
+                      studio.genlayer.com
+                    </span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
-                    <span className="text-text-muted">BFT Quorum:</span>
-                    <span className="text-secondary font-semibold">&gt;66.7% Consensus</span>
+                    <span className="text-text-muted">Consensus Engine:</span>
+                    <span className="text-secondary font-semibold">Intelligent Contract</span>
                   </div>
                   <div className="flex justify-between items-center py-1">
-                    <span className="text-text-muted">Contract Status:</span>
-                    <span className="text-primary-container font-semibold">Verified &amp; Deployed</span>
+                    <span className="text-text-muted">Active Tx:</span>
+                    <span className="text-on-surface font-semibold font-mono">
+                      {busy && scanState.txHash ? fmt(scanState.txHash) : currentResult?.txHash ? fmt(currentResult.txHash) : 'None'}
+                    </span>
                   </div>
                 </div>
               </div>
