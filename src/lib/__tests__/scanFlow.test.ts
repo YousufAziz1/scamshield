@@ -531,5 +531,181 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     expect(result.current.scanState.result?.validatorVotes).toHaveLength(2)
     expect(result.current.scanState.result?.validatorVotes?.[0].validatorAddress).toBe('0x4444444444444444444444444444444444444444')
   })
+
+  // ── 14. UNKNOWN DOES NOT DEFAULT TO 50% RISK SCORE ───────────────────────
+  it('UNKNOWN verdict preserves null risk_score and does NOT default to 50%', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_unknown_score')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'INSUFFICIENT_EVIDENCE',
+      last_round: {
+        round_validators: ['0x1111111111111111111111111111111111111111'],
+        validator_votes_name: ['AGREE'],
+      },
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        schema_version: '2.0',
+        verdict: 'UNKNOWN',
+        risk_score: null,
+        risk_category: 'UNKNOWN',
+        evidence_sufficiency: 'INSUFFICIENT',
+        consensus_status: 'INSUFFICIENT_EVIDENCE',
+        summary: 'Authoritative evidence missing or chain-mismatched.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken('0x1234567890123456789012345678901234567890', 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(result.current.scanState.result?.verdict).toBe('UNKNOWN')
+    expect(result.current.scanState.result?.risk_score).toBeNull()
+    expect(result.current.scanState.result?.riskScore).toBeNull()
+    expect(result.current.scanState.result?.evidence_sufficiency).toBe('INSUFFICIENT')
+    expect(result.current.scanState.result?.consensus_status).toBe('INSUFFICIENT_EVIDENCE')
+  })
+
+  // ── 15. MISSING TELEMETRY DISPLAYS NULL / UNAVAILABLE ────────────────────
+  it('handles absent validator telemetry by keeping fields null without fabricating data', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_minimal')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      // Omit last_round and round_validators entirely
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        schema_version: '2.0',
+        verdict: 'UNKNOWN',
+        risk_score: null,
+        evidence_sufficiency: 'INSUFFICIENT',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    const tel = result.current.scanState.result?.genlayer_telemetry
+    expect(tel?.round_validators).toEqual([])
+    expect(tel?.votes_committed).toBeNull()
+    expect(tel?.votes_revealed).toBeNull()
+    expect(result.current.scanState.result?.validatorVotes).toEqual([])
+  })
+
+  // ── 16. PROVIDER MISMATCH PRESERVED IN PROVIDER EVIDENCE ─────────────────
+  it('preserves provider mismatch in Schema 2.0 provider_evidence structure', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_mismatch')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'INSUFFICIENT_EVIDENCE',
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        schema_version: '2.0',
+        verdict: 'UNKNOWN',
+        risk_score: null,
+        evidence_sufficiency: 'INSUFFICIENT',
+        consensus_status: 'CHAIN_MISMATCH',
+        provider_evidence: [
+          {
+            provider: 'dexscreener',
+            requested_chain: 'ethereum',
+            requested_address: '0x1234',
+            returned_chain: 'bsc',
+            returned_address: '0x1234',
+            identity_match: true,
+            chain_match: false,
+            evidence_status: 'INVALID',
+            rejection_reason: 'CHAIN_MISMATCH: Pairs found only on non-requested chains',
+            material_fields: {},
+            risk_flags: [],
+          },
+        ],
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken('0x1234', 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    const pe = result.current.scanState.result?.provider_evidence
+    expect(pe).toHaveLength(1)
+    expect(pe?.[0].evidence_status).toBe('INVALID')
+    expect(pe?.[0].chain_match).toBe(false)
+    expect(pe?.[0].rejection_reason).toContain('CHAIN_MISMATCH')
+    expect(result.current.scanState.result?.consensus_status).toBe('CHAIN_MISMATCH')
+  })
+
+  // ── 17. MATERIAL DISAGREEMENT DETECTION ──────────────────────────────────
+  it('preserves MATERIAL_FIELDS_DISAGREE when contract reports validator divergence', async () => {
+    window.ethereum = {
+      request: vi.fn(async () => ({})),
+    } as unknown as typeof window.ethereum
+
+    mockConnect.mockResolvedValue(true)
+    mockWriteContract.mockResolvedValue('0xtx_disagree')
+    mockGetTransaction.mockResolvedValue({
+      status: TransactionStatus.FINALIZED,
+      result_name: 'MATERIAL_FIELDS_DISAGREE',
+    })
+    mockReadContract.mockResolvedValue(
+      JSON.stringify({
+        schema_version: '2.0',
+        verdict: 'UNKNOWN',
+        risk_score: null,
+        consensus_status: 'MATERIAL_FIELDS_DISAGREE',
+        evidence_sufficiency: 'INSUFFICIENT',
+        summary: 'Validators diverged on material security fields.',
+      })
+    )
+
+    const { result } = renderHook(() => useGenLayer())
+
+    await act(async () => {
+      await result.current.scanToken(targetToken, 'ethereum', dummyWallet)
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(result.current.scanState.result?.consensus_status).toBe('MATERIAL_FIELDS_DISAGREE')
+    expect(result.current.scanState.result?.verdict).toBe('UNKNOWN')
+  })
 })
+
 

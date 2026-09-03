@@ -17,7 +17,7 @@ export function VerdictCard({ result }: VerdictCardProps) {
   const isMalicious = verdict === 'SCAM' || verdict === 'RISKY'
   const isUnknown   = verdict === 'UNKNOWN'
 
-  const score = Math.round(result.riskScore)
+  const score = result.risk_score !== undefined ? result.risk_score : (result.riskScore !== undefined ? result.riskScore : null)
 
   const theme = isMalicious
     ? {
@@ -46,8 +46,8 @@ export function VerdictCard({ result }: VerdictCardProps) {
         bracket: 'SAFE CONTRACT',
       }
 
-  const tokenName = result.realTokenData?.name || result.tokenIdentity?.name || 'Unknown Asset'
-  const tokenSymbol = result.realTokenData?.symbol || result.tokenIdentity?.symbol || 'UNKNOWN'
+  const tokenName = result.realTokenData?.name || result.tokenIdentity?.name || result.identity?.project_name || 'Unknown Asset'
+  const tokenSymbol = result.realTokenData?.symbol || result.tokenIdentity?.symbol || result.identity?.symbol || 'UNKNOWN'
 
   const copyAddress = async () => {
     try {
@@ -60,7 +60,11 @@ export function VerdictCard({ result }: VerdictCardProps) {
   }
 
   // Radial progress circumference for SVG (radius 36 -> circumference = 2 * PI * 36 ~ 226)
-  const strokeDashoffset = 226 - (226 * score) / 100
+  // If score is null, strokeDashoffset remains 226 (unfilled)
+  const strokeDashoffset = score !== null ? 226 - (226 * Math.min(100, Math.max(0, Math.round(score)))) / 100 : 226
+
+  const consensusLabel = result.consensus_status || (result.genlayer_telemetry?.consensus_result ?? 'Consensus Verified')
+  const sufficiencyLabel = result.evidence_sufficiency || (isUnknown ? 'INSUFFICIENT' : 'SUFFICIENT')
 
   return (
     <div
@@ -91,6 +95,9 @@ export function VerdictCard({ result }: VerdictCardProps) {
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300">
                 {result.chainId.toUpperCase()}
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-400">
+                {sufficiencyLabel}
               </span>
             </div>
 
@@ -140,9 +147,11 @@ export function VerdictCard({ result }: VerdictCardProps) {
             </svg>
             <div className="absolute flex flex-col items-center justify-center">
               <span className="text-lg font-display font-black" style={{ color: theme.color }}>
-                {score}
+                {score !== null ? Math.round(score) : '--'}
               </span>
-              <span className="text-[8px] font-mono text-slate-500 uppercase">Risk</span>
+              <span className="text-[8px] font-mono text-slate-500 uppercase">
+                {score !== null ? 'Risk' : 'N/A'}
+              </span>
             </div>
           </div>
 
@@ -153,9 +162,9 @@ export function VerdictCard({ result }: VerdictCardProps) {
             <div className="text-sm font-display font-bold mt-0.5" style={{ color: theme.color }}>
               {theme.bracket}
             </div>
-            <div className="text-[9px] font-mono text-slate-500 mt-0.5 flex items-center justify-end gap-1">
+            <div className="text-[9px] font-mono text-slate-400 mt-0.5 flex items-center justify-end gap-1">
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.color }} />
-              BFT Consensus
+              {consensusLabel}
             </div>
           </div>
         </div>

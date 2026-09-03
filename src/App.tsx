@@ -143,12 +143,13 @@ export default function App() {
   }
 
   // Calculate Donut progress & theme (strictly real or standby)
-  const activeScore = currentResult ? Math.round(currentResult.riskScore) : null
   const isMalicious = currentResult ? currentResult.verdict === 'SCAM' || currentResult.verdict === 'RISKY' : false
   const isUnknown = currentResult ? currentResult.verdict === 'UNKNOWN' : false
+  const rawScore = currentResult?.risk_score ?? currentResult?.riskScore
+  const activeScore = currentResult && !isUnknown && rawScore != null ? Math.round(rawScore) : null
   const donutOffset = activeScore !== null ? 251.2 - (251.2 * (100 - activeScore)) / 100 : 251.2
   const donutColor = isMalicious ? '#FF3E3E' : isUnknown ? '#ffe253' : currentResult ? '#00ffc2' : '#323443'
-  const donutStatusText = isMalicious ? 'SCAM' : isUnknown ? 'WARN' : currentResult ? 'SAFE' : busy ? 'ACTIVE' : 'STANDBY'
+  const donutStatusText = isMalicious ? 'SCAM' : isUnknown ? 'UNKNOWN' : currentResult ? 'SAFE' : busy ? 'ACTIVE' : 'STANDBY'
 
   // Truthful session-bound metrics
   const sessionScansCount = recentScans.length
@@ -618,7 +619,7 @@ export default function App() {
                             ? 'text-primary-container bg-primary-container/10'
                             : 'text-tertiary-fixed bg-tertiary-fixed/10'
                         }`}>
-                          {currentResult.verdict} (Risk Score: {Math.round(currentResult.riskScore)}/100)
+                          {currentResult.verdict} {currentResult.risk_score != null ? `(Risk Score: ${Math.round(currentResult.risk_score)}/100)` : currentResult.riskScore != null ? `(Risk Score: ${Math.round(currentResult.riskScore)}/100)` : '(Risk Score: N/A)'}
                         </span>
                       </div>
 
@@ -831,6 +832,97 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Individual Authoritative Provider Evidence Breakdown */}
+                    {currentResult.provider_evidence && currentResult.provider_evidence.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-border-subtle/40 flex flex-col gap-3">
+                        <div className="text-[10px] font-mono text-text-muted uppercase font-bold">
+                          AUTHORITATIVE PROVIDER VALIDATION BREAKDOWN:
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {currentResult.provider_evidence.map((pe, idx) => {
+                            const isValid = pe.evidence_status === 'VALID'
+                            const isInvalid = pe.evidence_status === 'INVALID'
+
+                            let badgeText = 'UNAVAILABLE'
+                            let badgeStyle = 'bg-surface-container-highest/40 text-text-muted border-border-subtle'
+
+                            if (isValid) {
+                              badgeText = 'VALID / CHAIN-MATCHED'
+                              badgeStyle = 'bg-primary-container/10 text-primary-container border-primary-container/30'
+                            } else if (isInvalid) {
+                              if (pe.rejection_reason?.includes('CHAIN')) {
+                                badgeText = 'INVALID / CHAIN MISMATCH'
+                                badgeStyle = 'bg-alert-critical/10 text-alert-critical border-alert-critical/30'
+                              } else if (pe.rejection_reason?.includes('ADDRESS')) {
+                                badgeText = 'INVALID / ADDRESS MISMATCH'
+                                badgeStyle = 'bg-alert-critical/10 text-alert-critical border-alert-critical/30'
+                              } else {
+                                badgeText = 'INVALID / REJECTED'
+                                badgeStyle = 'bg-tertiary-fixed/10 text-tertiary-fixed border-tertiary-fixed/30'
+                              }
+                            }
+
+                            return (
+                              <div key={idx} className="p-3 rounded bg-surface-container-highest/20 border border-border-subtle/50 flex flex-col gap-2 font-mono text-xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-on-surface uppercase tracking-wider text-[11px]">
+                                    {pe.provider.replace('_', ' ')}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${badgeStyle}`}>
+                                    {badgeText}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-[10px] text-text-muted bg-surface-container-highest/30 p-2 rounded">
+                                  <div>
+                                    <span className="block text-[9px] opacity-70">TARGET CHAIN:</span>
+                                    <span className="font-semibold text-on-surface">{pe.requested_chain.toUpperCase()}</span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] opacity-70">RETURNED CHAIN:</span>
+                                    <span className={pe.chain_match ? 'text-primary-container font-semibold' : 'text-alert-critical font-semibold'}>
+                                      {pe.returned_chain ? pe.returned_chain.toUpperCase() : 'None'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] opacity-70">TARGET ADDR:</span>
+                                    <span className="font-semibold text-on-surface">{fmt(pe.requested_address)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] opacity-70">RETURNED ADDR:</span>
+                                    <span className={pe.identity_match ? 'text-primary-container font-semibold' : 'text-alert-critical font-semibold'}>
+                                      {pe.returned_address ? fmt(pe.returned_address) : 'None'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {pe.rejection_reason && (
+                                  <div className="text-[10px] text-alert-critical/90 bg-alert-critical/5 border border-alert-critical/20 p-1.5 rounded">
+                                    <span className="font-bold">Rejection: </span>
+                                    {pe.rejection_reason}
+                                  </div>
+                                )}
+
+                                {Object.keys(pe.material_fields || {}).length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {Object.entries(pe.material_fields).map(([k, v]) => {
+                                      if (v == null || v === '') return null
+                                      const displayVal = typeof v === 'number' ? (v < 0.0001 ? v.toExponential(2) : v.toLocaleString()) : String(v)
+                                      return (
+                                        <span key={k} className="px-1.5 py-0.5 rounded bg-surface-container-highest/40 border border-border-subtle/30 text-[9px] text-on-surface-variant">
+                                          {k.replace(/_/g, ' ')}: <strong className="text-on-surface">{displayVal}</strong>
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* On-Chain Market Evidence Metrics */}
                     {(() => {
                       const rt = currentResult.realTokenData
@@ -944,6 +1036,15 @@ export default function App() {
                           </span>
                           <span className="font-label-caps text-[11px] mt-1 tracking-widest font-bold" style={{ color: donutColor }}>
                             {donutStatusText}
+                          </span>
+                        </>
+                      ) : isUnknown ? (
+                        <>
+                          <span className="font-display-lg text-[32px] text-tertiary-fixed leading-none font-bold">
+                            --
+                          </span>
+                          <span className="font-label-caps text-[10px] text-tertiary-fixed mt-1 tracking-widest font-bold">
+                            UNKNOWN
                           </span>
                         </>
                       ) : busy ? (
@@ -1100,37 +1201,63 @@ export default function App() {
                 </div>
               </div>
 
-              {/* REAL NODE TELEMETRY: Strictly Truthful per Requirements 1 & 6 */}
+              {/* REAL GENLAYER TELEMETRY: Strictly Truthful per Phase 8-C */}
               <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] flex flex-col gap-3">
                 <div className="flex items-center justify-between border-b border-border-subtle/50 pb-2">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[16px] text-primary-container">hub</span>
                     <h3 className="font-label-caps text-[11px] text-text-muted font-bold tracking-widest">
-                      NODE TELEMETRY
+                      GENLAYER TELEMETRY
                     </h3>
                   </div>
                   <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,255,194,0.8)]" />
                 </div>
 
-                <div className="flex flex-col gap-2 text-[11px] font-mono">
+                <div className="flex flex-col gap-1.5 text-[11px] font-mono">
                   <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
-                    <span className="text-text-muted">Network:</span>
-                    <span className="text-primary-container font-semibold">StudioNet (61999)</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
-                    <span className="text-text-muted">RPC Endpoint:</span>
-                    <span className="text-on-surface font-semibold truncate max-w-[140px]" title="https://studio.genlayer.com/api">
-                      studio.genlayer.com
+                    <span className="text-text-muted">Round Validators:</span>
+                    <span className="text-on-surface font-semibold truncate max-w-[130px]" title={currentResult?.genlayer_telemetry?.round_validators?.join(', ') || 'Unavailable'}>
+                      {currentResult?.genlayer_telemetry?.round_validators?.length
+                        ? `${currentResult.genlayer_telemetry.round_validators.length} Node(s)`
+                        : 'Unavailable'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
-                    <span className="text-text-muted">Consensus Engine:</span>
-                    <span className="text-secondary font-semibold">Intelligent Contract</span>
+                    <span className="text-text-muted">Votes Committed:</span>
+                    <span className="text-primary-container font-semibold">
+                      {currentResult?.genlayer_telemetry?.votes_committed ?? 'Unavailable'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
+                    <span className="text-text-muted">Votes Revealed:</span>
+                    <span className="text-primary-container font-semibold">
+                      {currentResult?.genlayer_telemetry?.votes_revealed ?? 'Unavailable'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
+                    <span className="text-text-muted">Validator Votes:</span>
+                    <span className="text-on-surface font-semibold truncate max-w-[130px]">
+                      {currentResult?.genlayer_telemetry?.validator_votes_name?.length
+                        ? currentResult.genlayer_telemetry.validator_votes_name.join(', ')
+                        : 'Unavailable'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
+                    <span className="text-text-muted">Rounds Executed:</span>
+                    <span className="text-on-surface font-semibold">
+                      {currentResult?.genlayer_telemetry?.num_of_rounds ?? 'Unavailable'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border-subtle/30">
+                    <span className="text-text-muted">Consensus Result:</span>
+                    <span className="text-secondary font-semibold">
+                      {currentResult?.genlayer_telemetry?.consensus_result ?? 'Unavailable'}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center py-1">
                     <span className="text-text-muted">Active Tx:</span>
-                    <span className="text-on-surface font-semibold font-mono">
-                      {busy && scanState.txHash ? fmt(scanState.txHash) : currentResult?.txHash ? fmt(currentResult.txHash) : 'None'}
+                    <span className="text-on-surface font-semibold font-mono truncate max-w-[130px]">
+                      {busy && scanState.txHash ? fmt(scanState.txHash) : currentResult?.txHash ? fmt(currentResult.txHash) : 'Unavailable'}
                     </span>
                   </div>
                 </div>

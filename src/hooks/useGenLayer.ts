@@ -2,17 +2,43 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { createClient } from 'genlayer-js'
 import { studionet } from 'genlayer-js/chains'
 import { CONTRACT } from '@/lib/genlayer'
-import type { ScanState, ScanResult, Verdict, ValidatorVote, RiskFlag } from '@/types'
+import type {
+  ScanState,
+  ScanResult,
+  Verdict,
+  ValidatorVote,
+  CoreRiskFlag,
+  ProviderEvidence,
+  GenLayerTelemetry,
+  EvidenceSufficiency,
+  ConsensusStatus,
+  TokenIdentity,
+  MaterialSecurityFields,
+} from '@/types'
 import { fetchTokenRealData, type RealTokenData } from '@/lib/tokenData'
 
 const STATUS_ORDER = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'accepted', 'finalized']
 
 export interface ParsedContractResult {
+  schema_version?: string
+  token_address?: string
+  chain?: string
+  chain_id?: string
   verdict?: Verdict
-  riskScore?: number
+  risk_score?: number | null
+  risk_category?: string
   summary?: string
-  flags?: RiskFlag[]
-  evidenceSufficiency?: 'SUFFICIENT' | 'INSUFFICIENT'
+  evidence_sufficiency?: EvidenceSufficiency
+  consensus_status?: ConsensusStatus
+  identity?: TokenIdentity
+  provider_evidence?: ProviderEvidence[]
+  material_security_fields?: MaterialSecurityFields
+  core_risk_flags?: CoreRiskFlag[]
+  evidence_rejection_reasons?: string[]
+  // Legacy compatibility fields
+  riskScore?: number | null
+  flags?: CoreRiskFlag[]
+  evidenceSufficiency?: EvidenceSufficiency
   tokenIdentity?: {
     name: string
     symbol: string
@@ -95,17 +121,20 @@ export function useGenLayer() {
 
   useEffect(() => { void checkSnap() }, [checkSnap])
 
-  // ── Build scan result from parsed JSON ───────────────────────────
+  // ── Build scan result from parsed Schema 2.0 JSON ────────────────
   function buildScanResult(
     parsed: ParsedContractResult,
     tokenAddress: string,
     chainId: string,
-    txHash: string,
+    txHash: string | null,
     realData?: RealTokenData | null,
     txRecord?: Record<string, unknown>
   ): ScanResult {
-    const score = parsed.riskScore ?? 50
-    const rawVerdict = parsed.verdict ?? (score > 70 ? 'SCAM' : score > 30 ? 'RISKY' : 'SAFE')
+    const rawVerdict: Verdict = parsed.verdict ?? 'UNKNOWN'
+    // Strict requirement: Never default missing score to 50 for UNKNOWN!
+    const score = parsed.risk_score !== undefined ? parsed.risk_score : (parsed.riskScore !== undefined ? parsed.riskScore : (rawVerdict === 'UNKNOWN' ? null : 0))
+    const rawSufficiency: EvidenceSufficiency = parsed.evidence_sufficiency ?? parsed.evidenceSufficiency ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT' : 'SUFFICIENT')
+    const consensusStatus: ConsensusStatus = parsed.consensus_status ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT_EVIDENCE' : 'MAJORITY_AGREE')
 
     // Extract authentic validator committee from GenLayer consensus round
     const lastRound = txRecord?.last_round as {
@@ -124,30 +153,71 @@ export function useGenLayer() {
       vote: rawVerdict,
     }))
 
-    const telemetry = {
+    const telemetry: GenLayerTelemetry = {
+      transaction_hash: txHash,
+      num_of_rounds: txRecord?.num_of_rounds != null ? Number(txRecord.num_of_rounds) : null,
+      round_validators: roundValidators,
+      votes_committed: lastRound?.votes_committed != null ? Number(lastRound.votes_committed) : (roundValidators.length > 0 ? roundValidators.length : null),
+      votes_revealed: lastRound?.votes_revealed != null ? Number(lastRound.votes_revealed) : (roundValidators.length > 0 ? roundValidators.length : null),
+      validator_votes_name: votesName,
+      consensus_result: txRecord?.result_name != null ? String(txRecord.result_name) : null,
+      execution_status: txRecord?.statusName != null ? String(txRecord.statusName) : (txRecord?.status != null ? String(txRecord.status) : null),
       roundsExecuted: Number(txRecord?.num_of_rounds || 1),
       votesCommitted: Number(lastRound?.votes_committed || roundValidators.length),
       votesRevealed: Number(lastRound?.votes_revealed || roundValidators.length),
       resultName: String(txRecord?.result_name || 'MAJORITY_AGREE'),
       contractAddress: CONTRACT,
-      networkName: 'Genlayer Studio Network',
+      networkName: 'GenLayer StudioNet',
       chainId: 61999,
     }
 
+    const providerEvidence = parsed.provider_evidence ?? []
+    const materialSecurityFields = parsed.material_security_fields ?? {}
+    const coreRiskFlags = parsed.core_risk_flags ?? parsed.flags ?? []
+    const rejectionReasons = parsed.evidence_rejection_reasons ?? []
+
+    const tokenIdentity = parsed.identity ?? (parsed.tokenIdentity ? {
+      token_address: tokenAddress,
+      chain: parsed.tokenIdentity.chain,
+      chain_id: chainId,
+      project_name: parsed.tokenIdentity.name,
+      symbol: parsed.tokenIdentity.symbol,
+    } : undefined)
+
     return {
+      schema_version: parsed.schema_version ?? '2.0',
+      token_address: tokenAddress,
+      chain: chainId,
+      chain_id: chainId,
+      verdict: rawVerdict,
+      risk_score: score,
+      risk_category: parsed.risk_category ?? (rawVerdict === 'SCAM' ? 'HIGH' : rawVerdict === 'RISKY' ? 'MEDIUM' : rawVerdict === 'SAFE' ? 'LOW' : 'UNKNOWN'),
+      summary: parsed.summary ?? (rawVerdict === 'UNKNOWN' ? 'Authoritative evidence missing or chain-mismatched. Contract security cannot be verified.' : 'Consensus validation complete.'),
+      evidence_sufficiency: rawSufficiency,
+      consensus_status: consensusStatus,
+      identity: tokenIdentity,
+      provider_evidence: providerEvidence,
+      material_security_fields: materialSecurityFields,
+      core_risk_flags: coreRiskFlags,
+      evidence_rejection_reasons: rejectionReasons,
+      genlayer_telemetry: telemetry,
+
+      // Convenient aliases
       tokenAddress,
       chainId,
-      verdict: rawVerdict,
       riskScore: score,
-      summary: parsed.summary ?? 'Analysis complete.',
-      consensusReached: true,
-      flags: parsed.flags ?? [],
+      flags: coreRiskFlags,
       validatorVotes: votes,
       scannedAt: Date.now(),
       txHash,
       telemetry,
-      evidenceSufficiency: parsed.evidenceSufficiency,
-      tokenIdentity: parsed.tokenIdentity,
+      evidenceSufficiency: rawSufficiency,
+      consensusReached: consensusStatus === 'MAJORITY_AGREE',
+      tokenIdentity: tokenIdentity ? {
+        name: tokenIdentity.project_name,
+        symbol: tokenIdentity.symbol,
+        chain: tokenIdentity.chain,
+      } : parsed.tokenIdentity,
       realTokenData: realData ?? undefined,
     }
   }
@@ -168,7 +238,7 @@ export function useGenLayer() {
       console.error('Failed to fetch real token data:', e)
     }
 
-    // ── Explicit Simulation Mode ────────────────────────────────────
+    // ── Explicit Simulation Mode (Zero Synthetic Data) ───────────────
     if (isSimulated) {
       let stageIdx = 0
       const stages: ScanState['status'][] = ['submitting', 'pending', 'proposing', 'committing', 'revealing', 'finalized']
@@ -181,10 +251,12 @@ export function useGenLayer() {
         } else {
           clearInterval(interval)
           const addrLower = tokenAddress.toLowerCase()
-          let score: number
+          let score: number | null
           let verdictStr: Verdict
           let summaryStr: string
-          let flagsList: RiskFlag[] = []
+          let sufficiency: EvidenceSufficiency
+          let consensusStatus: ConsensusStatus
+          let flagsList: CoreRiskFlag[] = []
 
           if (realData && realData.isVerified) {
             const hasHigh = realData.flags.some(f => f.severity === 'HIGH')
@@ -194,19 +266,25 @@ export function useGenLayer() {
               score = 88
               verdictStr = 'SCAM'
               summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk security issues for ${realData.name} (${realData.symbol}). GoPlus analysis identified critical anomalies: ${realData.flags.map(f => f.title).join(', ')}.`
+              sufficiency = 'SUFFICIENT'
+              consensusStatus = 'MAJORITY_AGREE'
             } else if (hasMed) {
               score = 55
               verdictStr = 'RISKY'
               summaryStr = `Warning: Elevated threat parameters found for ${realData.name} (${realData.symbol}). Token contract contains moderate risk indicators: ${realData.flags.map(f => f.title).join(', ')}.`
+              sufficiency = 'SUFFICIENT'
+              consensusStatus = 'MAJORITY_AGREE'
             } else {
               score = 8
               verdictStr = 'SAFE'
               summaryStr = `Consensus validation complete for ${realData.name} (${realData.symbol}). Authoritative metadata verified on ${chainId.toUpperCase()}. No threat indicators identified.`
+              sufficiency = 'SUFFICIENT'
+              consensusStatus = 'MAJORITY_AGREE'
             }
 
             flagsList = realData.flags.map((f, idx) => ({
               id: `goplus-${idx}`,
-              severity: f.severity.toLowerCase() as RiskFlag['severity'],
+              severity: f.severity.toLowerCase() as CoreRiskFlag['severity'],
               label: f.title,
               detail: f.description
             }))
@@ -216,28 +294,90 @@ export function useGenLayer() {
               score = 5
               verdictStr = 'SAFE'
               summaryStr = `Consensus validation successful for verified reference token (${tokenAddress.slice(0, 8)}). Contract conforms to standard specifications with verified source code.`
+              sufficiency = 'SUFFICIENT'
+              consensusStatus = 'MAJORITY_AGREE'
             } else if (cleanChainLower === 'bsc' && (addrLower === '0x4f128e6dbd1283c799a4e21a2c91a329d48b1111' || addrLower === '0x8076c74c5e3f5852037f31ff0093eeb8c8add8d3' || addrLower === '0x58d4b9e633b41e6f00d24c3d5a96c4d4e8b55da8')) {
               score = 92
               verdictStr = 'SCAM'
               summaryStr = `CRITICAL ALERT: Threat assessment flagged high-risk honeypot bytecode. Direct analysis identifies non-standard transfer taxes (up to 100%), blocked liquidity transfers, and unrenounced owner control permissions.`
+              sufficiency = 'SUFFICIENT'
+              consensusStatus = 'MAJORITY_AGREE'
               flagsList = [
                 { id: 'honeypot_bytecode', severity: 'high', label: 'Honeypot Bytecode Pattern', detail: 'The contract contains execution logic that prevents token sellers from transferring tokens back to the liquidity pool.' },
                 { id: 'variable_tax', severity: 'high', label: 'Variable Sell Tax', detail: 'Transfer tax parameters can be dynamically set to 100% by the contract owner, preventing swaps.' },
                 { id: 'unrenounced_owner', severity: 'medium', label: 'Unrenounced Ownership', detail: 'Ownership is held by an active EOA address with permissions to modify critical parameters.' }
               ]
             } else {
-              score = 50
+              // Strictly null risk score and INSUFFICIENT when unverified
+              score = null
               verdictStr = 'UNKNOWN'
               summaryStr = 'Unable to verify token identity or security parameters. No authoritative market or contract metadata found on the selected network.'
+              sufficiency = 'INSUFFICIENT'
+              consensusStatus = 'INSUFFICIENT_EVIDENCE'
               flagsList = []
             }
           }
 
           const parsed: ParsedContractResult = {
+            schema_version: '2.0',
+            token_address: tokenAddress,
+            chain: chainId,
+            chain_id: chainId,
             verdict: verdictStr,
-            riskScore: score,
+            risk_score: score,
+            risk_category: verdictStr === 'SCAM' ? 'HIGH' : verdictStr === 'RISKY' ? 'MEDIUM' : verdictStr === 'SAFE' ? 'LOW' : 'UNKNOWN',
             summary: summaryStr,
-            flags: flagsList
+            evidence_sufficiency: sufficiency,
+            consensus_status: consensusStatus,
+            core_risk_flags: flagsList,
+            identity: {
+              token_address: tokenAddress,
+              chain: chainId,
+              chain_id: chainId,
+              project_name: realData?.name || 'UNKNOWN',
+              symbol: realData?.symbol || 'UNKNOWN',
+            },
+            provider_evidence: [
+              {
+                provider: 'dexscreener',
+                requested_chain: chainId,
+                requested_address: tokenAddress,
+                returned_chain: realData?.isVerified ? chainId : null,
+                returned_address: realData?.isVerified ? tokenAddress : null,
+                identity_match: !!realData?.isVerified,
+                chain_match: !!realData?.isVerified,
+                evidence_status: realData?.isVerified ? 'VALID' : 'INVALID',
+                material_fields: {
+                  price_usd: realData?.price,
+                  liquidity_usd: realData?.liquidity,
+                  fdv_usd: realData?.fdv,
+                },
+                risk_flags: [],
+                rejection_reason: realData?.isVerified ? null : 'NO_MATCHING_CHAIN_AND_ADDRESS_PAIR',
+              },
+              {
+                provider: 'goplus_token',
+                requested_chain: chainId,
+                requested_address: tokenAddress,
+                returned_chain: realData?.isVerified ? chainId : null,
+                returned_address: realData?.isVerified ? tokenAddress : null,
+                identity_match: !!realData?.isVerified,
+                chain_match: !!realData?.isVerified,
+                evidence_status: realData?.isVerified ? 'VALID' : 'UNAVAILABLE',
+                material_fields: {
+                  buy_tax: realData?.buyTax,
+                  sell_tax: realData?.sellTax,
+                },
+                risk_flags: flagsList.map(f => f.label),
+                rejection_reason: realData?.isVerified ? null : 'NO_RECORD_FOUND_FOR_ADDRESS',
+              }
+            ],
+            material_security_fields: {
+              buy_tax: realData?.buyTax ?? null,
+              sell_tax: realData?.sellTax ?? null,
+              liquidity_usd: realData?.liquidity ?? null,
+            },
+            evidence_rejection_reasons: realData?.isVerified ? [] : ['NO_AUTHORITATIVE_PROVIDER_MATCH'],
           }
 
           const scanResult = buildScanResult(parsed, tokenAddress, chainId, txHash, realData)
