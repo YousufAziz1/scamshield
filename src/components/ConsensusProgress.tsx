@@ -105,7 +105,7 @@ export function ConsensusProgress({ status, validatorVotes = [], progressPercent
               const color =
                 vote.vote === 'SCAM' ? 'var(--accent-red)' :
                 vote.vote === 'RISKY' ? 'var(--accent-yellow)' :
-                vote.vote === 'SAFE' ? 'var(--accent-green)' : 'var(--text-muted)'
+                vote.vote === 'SAFE' ? 'var(--accent-green)' : 'var(--accent-primary)'
 
               return (
                 <div
@@ -116,7 +116,7 @@ export function ConsensusProgress({ status, validatorVotes = [], progressPercent
                     boxShadow: `0 0 8px ${color}`,
                     animationDelay: `${i * 0.2}s`,
                   }}
-                  title={`Validator ${vote.validatorAddress || i + 1}: ${vote.vote} (${vote.voteName || 'AGREE'})`}
+                  title={`Validator ${vote.validatorAddress || i + 1}: ${vote.voteName || vote.vote || 'Unavailable'}`}
                 />
               )
             })}

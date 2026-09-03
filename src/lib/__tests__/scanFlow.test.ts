@@ -609,9 +609,15 @@ describe('GenLayer Live Scan Flow & Snap Independency Tests', () => {
     })
 
     const tel = result.current.scanState.result?.genlayer_telemetry
+    expect(tel?.num_of_rounds).toBeNull()
     expect(tel?.round_validators).toEqual([])
     expect(tel?.votes_committed).toBeNull()
     expect(tel?.votes_revealed).toBeNull()
+    expect(tel?.consensus_result).toBeNull()
+    expect(tel?.roundsExecuted).toBeNull()
+    expect(tel?.votesCommitted).toBeNull()
+    expect(tel?.votesRevealed).toBeNull()
+    expect(tel?.resultName).toBeNull()
     expect(result.current.scanState.result?.validatorVotes).toEqual([])
   })
 

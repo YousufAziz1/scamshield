@@ -134,7 +134,7 @@ export function useGenLayer() {
     // Strict requirement: Never display or return a score for UNKNOWN; must remain null
     const score = rawVerdict === 'UNKNOWN' ? null : (parsed.risk_score !== undefined ? parsed.risk_score : (parsed.riskScore !== undefined ? parsed.riskScore : null))
     const rawSufficiency: EvidenceSufficiency = parsed.evidence_sufficiency ?? parsed.evidenceSufficiency ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT' : 'SUFFICIENT')
-    const consensusStatus: ConsensusStatus = parsed.consensus_status ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT_EVIDENCE' : 'MAJORITY_AGREE')
+    const consensusStatus: ConsensusStatus = parsed.consensus_status ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT_EVIDENCE' : 'UNKNOWN')
 
     // Extract authentic validator committee from GenLayer consensus round
     const lastRound = txRecord?.last_round as {
@@ -144,28 +144,58 @@ export function useGenLayer() {
       votes_revealed?: string | number
     } | undefined
 
-    const roundValidators = lastRound?.round_validators || []
-    const votesName = lastRound?.validator_votes_name || []
+    const roundValidators = Array.isArray(lastRound?.round_validators) ? lastRound.round_validators : []
+    const votesName = Array.isArray(lastRound?.validator_votes_name) ? lastRound.validator_votes_name : []
 
+    // Explicit source mapping (Zero-Inference Rule):
+    // Validator Committee -> raw round_validators only
+    // Validator Vote Name -> raw validator_votes_name only (never default to 'AGREE')
+    // Validator Vote (verdict) -> null unless explicitly returned (never infer from contract rawVerdict)
     const votes: ValidatorVote[] = roundValidators.map((addr, i) => ({
       validatorAddress: addr,
-      voteName: votesName[i] || 'AGREE',
-      vote: rawVerdict,
+      voteName: votesName[i] != null && votesName[i] !== '' ? String(votesName[i]) : null,
+      vote: null,
     }))
 
+    // Raw telemetry source mapping (Zero-Inference Rule):
+    // - num_of_rounds: raw num_of_rounds only
+    // - votes_committed: raw votes_committed only (never roundValidators.length)
+    // - votes_revealed: raw votes_revealed only (never roundValidators.length)
+    // - consensus_result: raw result_name only (never default to 'MAJORITY_AGREE')
+    // - execution_status: raw statusName / status only
+    const rawNumRounds = txRecord?.num_of_rounds != null && txRecord.num_of_rounds !== ''
+      ? Number(txRecord.num_of_rounds)
+      : null
+
+    const rawVotesCommitted = lastRound?.votes_committed != null && lastRound.votes_committed !== ''
+      ? Number(lastRound.votes_committed)
+      : null
+
+    const rawVotesRevealed = lastRound?.votes_revealed != null && lastRound.votes_revealed !== ''
+      ? Number(lastRound.votes_revealed)
+      : null
+
+    const rawResultName = txRecord?.result_name != null && txRecord.result_name !== ''
+      ? String(txRecord.result_name)
+      : null
+
+    const rawExecutionStatus = txRecord?.statusName != null && txRecord.statusName !== ''
+      ? String(txRecord.statusName)
+      : (txRecord?.status != null && txRecord.status !== '' ? String(txRecord.status) : null)
+
     const telemetry: GenLayerTelemetry = {
-      transaction_hash: txHash,
-      num_of_rounds: txRecord?.num_of_rounds != null ? Number(txRecord.num_of_rounds) : null,
+      transaction_hash: txHash ?? null,
+      num_of_rounds: rawNumRounds,
       round_validators: roundValidators,
-      votes_committed: lastRound?.votes_committed != null ? Number(lastRound.votes_committed) : (roundValidators.length > 0 ? roundValidators.length : null),
-      votes_revealed: lastRound?.votes_revealed != null ? Number(lastRound.votes_revealed) : (roundValidators.length > 0 ? roundValidators.length : null),
+      votes_committed: rawVotesCommitted,
+      votes_revealed: rawVotesRevealed,
       validator_votes_name: votesName,
-      consensus_result: txRecord?.result_name != null ? String(txRecord.result_name) : null,
-      execution_status: txRecord?.statusName != null ? String(txRecord.statusName) : (txRecord?.status != null ? String(txRecord.status) : null),
-      roundsExecuted: Number(txRecord?.num_of_rounds || 1),
-      votesCommitted: Number(lastRound?.votes_committed || roundValidators.length),
-      votesRevealed: Number(lastRound?.votes_revealed || roundValidators.length),
-      resultName: String(txRecord?.result_name || 'MAJORITY_AGREE'),
+      consensus_result: rawResultName,
+      execution_status: rawExecutionStatus,
+      roundsExecuted: rawNumRounds,
+      votesCommitted: rawVotesCommitted,
+      votesRevealed: rawVotesRevealed,
+      resultName: rawResultName,
       contractAddress: CONTRACT,
       networkName: 'GenLayer StudioNet',
       chainId: 61999,

@@ -6,6 +6,7 @@ import { CONTRACT } from '@/lib/genlayer'
 import { useWallet } from '@/hooks/useWallet'
 import { VerdictCard } from '@/components/VerdictCard'
 import { RiskFlags } from '@/components/RiskFlags'
+import { ConsensusTelemetry } from '@/components/ConsensusTelemetry'
 import type { ScanResult } from '@/types'
 
 const fmt = (addr: string) => (!addr ? '' : addr.length <= 13 ? addr : `${addr.slice(0, 6)}...${addr.slice(-4)}`)
@@ -739,65 +740,7 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono text-xs">
-                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
-                        <span className="text-text-muted block text-[9px]">TX STATUS</span>
-                        <span className="font-bold text-primary-container text-xs mt-0.5 block uppercase">
-                          FINALIZED
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
-                        <span className="text-text-muted block text-[9px]">ROUNDS</span>
-                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
-                          {currentResult.telemetry?.roundsExecuted ?? 1}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
-                        <span className="text-text-muted block text-[9px]">VOTES COMMITTED</span>
-                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
-                          {currentResult.telemetry?.votesCommitted ?? currentResult.validatorVotes?.length ?? 'N/A'}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
-                        <span className="text-text-muted block text-[9px]">VOTES REVEALED</span>
-                        <span className="font-bold text-on-surface text-xs mt-0.5 block">
-                          {currentResult.telemetry?.votesRevealed ?? currentResult.validatorVotes?.length ?? 'N/A'}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
-                        <span className="text-text-muted block text-[9px]">CONSENSUS RESULT</span>
-                        <span className="font-bold text-secondary text-xs mt-0.5 block truncate">
-                          {currentResult.telemetry?.resultName ?? 'MAJORITY_AGREE'}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded bg-surface-container-highest/20 border border-border-subtle/40">
-                        <span className="text-text-muted block text-[9px]">CONTRACT</span>
-                        <span className="font-bold text-primary-container text-xs mt-0.5 block truncate" title={CONTRACT}>
-                          {fmt(CONTRACT)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Validator Committee: Real addresses if published, N/A if not */}
-                    <div className="mt-4 pt-3 border-t border-border-subtle/40">
-                      <div className="text-[10px] font-mono text-text-muted uppercase font-bold mb-2">
-                        VALIDATOR COMMITTEE:
-                      </div>
-                      {currentResult.validatorVotes && currentResult.validatorVotes.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 font-mono text-xs">
-                          {currentResult.validatorVotes.map((v, i) => (
-                            <div key={i} className="p-2.5 rounded bg-surface-container-highest/30 border border-border-subtle/40 flex items-center justify-between">
-                              <span className="text-text-muted">Node #{i + 1}: <strong className="text-on-surface">{fmt(v.validatorAddress)}</strong></span>
-                              <span className="text-primary-container text-[10px] font-bold">{v.voteName || 'AGREE'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-xs font-mono text-text-muted p-2 rounded bg-surface-container-highest/10 border border-border-subtle/30">
-                          N/A — Validator identities not published in round metadata.
-                        </div>
-                      )}
-                    </div>
+                    <ConsensusTelemetry result={currentResult} contractAddress={CONTRACT} />
                   </div>
 
                   {/* [A] AUTHORITATIVE PROVIDER EVIDENCE SECTION */}
@@ -1111,8 +1054,15 @@ export default function App() {
                         badgeClass = 'text-text-muted bg-surface-container-highest/20 border-border-subtle'
                       }
                     } else if (currentResult) {
-                      statusLabel = 'FINALIZED'
-                      badgeClass = 'text-primary-container bg-primary-container/10 border-primary-container/30'
+                      // Under Zero-Inference rule, do not fabricate that all internal stages completed.
+                      // Only mark verifiable lifecycle status on finalization stage; internal stages are Unavailable unless recorded.
+                      if (s.key === 'accepted') {
+                        statusLabel = (currentResult.genlayer_telemetry?.execution_status || currentResult.telemetry?.execution_status || 'FINALIZED').toUpperCase()
+                        badgeClass = 'text-primary-container bg-primary-container/10 border-primary-container/30'
+                      } else {
+                        statusLabel = 'Unavailable'
+                        badgeClass = 'text-text-muted bg-surface-container-highest/20 border-border-subtle/50'
+                      }
                     }
 
                     return (

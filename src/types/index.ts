@@ -33,8 +33,8 @@ export type RiskFlag = CoreRiskFlag
 
 export interface ValidatorVote {
   validatorAddress: string
-  voteName: string
-  vote: Verdict
+  voteName: string | null
+  vote: string | null
 }
 
 export interface ProviderEvidence {
@@ -62,14 +62,14 @@ export interface GenLayerTelemetry {
   validator_votes_name: string[]
   consensus_result: string | null
   execution_status: string | null
-  // Supplemental fields for backwards compatibility
-  roundsExecuted?: number
-  votesCommitted?: number
-  votesRevealed?: number
-  resultName?: string
-  contractAddress?: string
-  networkName?: string
-  chainId?: number
+  // Supplemental fields for backwards compatibility (strictly nullable under Zero-Inference rule)
+  roundsExecuted?: number | null
+  votesCommitted?: number | null
+  votesRevealed?: number | null
+  resultName?: string | null
+  contractAddress?: string | null
+  networkName?: string | null
+  chainId?: number | null
 }
 
 export interface TokenIdentity {
