@@ -17,7 +17,8 @@ export function VerdictCard({ result }: VerdictCardProps) {
   const isMalicious = verdict === 'SCAM' || verdict === 'RISKY'
   const isUnknown   = verdict === 'UNKNOWN'
 
-  const score = result.risk_score !== undefined ? result.risk_score : (result.riskScore !== undefined ? result.riskScore : null)
+  // Strict rule: If UNKNOWN, never show a numerical score or 50
+  const score = isUnknown ? null : (result.risk_score !== undefined ? result.risk_score : (result.riskScore !== undefined ? result.riskScore : null))
 
   const theme = isMalicious
     ? {

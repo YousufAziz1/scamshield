@@ -619,7 +619,7 @@ export default function App() {
                             ? 'text-primary-container bg-primary-container/10'
                             : 'text-tertiary-fixed bg-tertiary-fixed/10'
                         }`}>
-                          {currentResult.verdict} {currentResult.risk_score != null ? `(Risk Score: ${Math.round(currentResult.risk_score)}/100)` : currentResult.riskScore != null ? `(Risk Score: ${Math.round(currentResult.riskScore)}/100)` : '(Risk Score: N/A)'}
+                          {currentResult.verdict} {currentResult.verdict !== 'UNKNOWN' && (currentResult.risk_score != null || currentResult.riskScore != null) ? `(Risk Score: ${Math.round(currentResult.risk_score ?? currentResult.riskScore!)}/100)` : '(Risk Score: N/A)'}
                         </span>
                       </div>
 

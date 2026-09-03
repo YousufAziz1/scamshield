@@ -131,8 +131,8 @@ export function useGenLayer() {
     txRecord?: Record<string, unknown>
   ): ScanResult {
     const rawVerdict: Verdict = parsed.verdict ?? 'UNKNOWN'
-    // Strict requirement: Never default missing score to 50 for UNKNOWN!
-    const score = parsed.risk_score !== undefined ? parsed.risk_score : (parsed.riskScore !== undefined ? parsed.riskScore : (rawVerdict === 'UNKNOWN' ? null : 0))
+    // Strict requirement: Never display or return a score for UNKNOWN; must remain null
+    const score = rawVerdict === 'UNKNOWN' ? null : (parsed.risk_score !== undefined ? parsed.risk_score : (parsed.riskScore !== undefined ? parsed.riskScore : null))
     const rawSufficiency: EvidenceSufficiency = parsed.evidence_sufficiency ?? parsed.evidenceSufficiency ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT' : 'SUFFICIENT')
     const consensusStatus: ConsensusStatus = parsed.consensus_status ?? (rawVerdict === 'UNKNOWN' ? 'INSUFFICIENT_EVIDENCE' : 'MAJORITY_AGREE')
 
