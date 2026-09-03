@@ -619,7 +619,7 @@ export default function App() {
                             ? 'text-primary-container bg-primary-container/10'
                             : 'text-tertiary-fixed bg-tertiary-fixed/10'
                         }`}>
-                          {currentResult.verdict} {currentResult.verdict !== 'UNKNOWN' && (currentResult.risk_score != null || currentResult.riskScore != null) ? `(Risk Score: ${Math.round(currentResult.risk_score ?? currentResult.riskScore!)}/100)` : '(Risk Score: N/A)'}
+                          {currentResult.verdict}{currentResult.verdict !== 'UNKNOWN' && (currentResult.risk_score != null || currentResult.riskScore != null) ? ` (Risk Score: ${Math.round(currentResult.risk_score ?? currentResult.riskScore!)}/100)` : ''}
                         </span>
                       </div>
 
@@ -722,14 +722,19 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 3. GENLAYER CONSENSUS SECTION */}
+                  {/* [B] FINALIZED GENLAYER CONSENSUS VERDICT SECTION */}
                   <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
                     <div className="flex items-center justify-between pb-3 border-b border-border-subtle/50 mb-3">
-                      <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[16px] text-primary-container">account_tree</span>
-                        GENLAYER CONSENSUS
-                      </h3>
-                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20">
+                      <div>
+                        <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[16px] text-primary-container">account_tree</span>
+                          [B] FINALIZED GENLAYER CONSENSUS VERDICT (AUTHORITATIVE)
+                        </h3>
+                        <p className="text-[10px] text-text-muted mt-0.5">
+                          On-chain BFT consensus execution result. This finalized verdict is authoritative for all security parameters.
+                        </p>
+                      </div>
+                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20 shrink-0">
                         ON-CHAIN BFT
                       </span>
                     </div>
@@ -795,14 +800,19 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 4. EVIDENCE SECTION */}
+                  {/* [A] AUTHORITATIVE PROVIDER EVIDENCE SECTION */}
                   <div className="bg-surface-card backdrop-blur-xl border border-border-subtle rounded-xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
                     <div className="flex items-center justify-between pb-3 border-b border-border-subtle/50 mb-3">
-                      <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[16px] text-primary-container">fact_check</span>
-                        EVIDENCE
-                      </h3>
-                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20">
+                      <div>
+                        <h3 className="font-label-caps text-xs text-text-muted font-bold tracking-widest flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[16px] text-primary-container">fact_check</span>
+                          [A] AUTHORITATIVE PROVIDER EVIDENCE (RAW TELEMETRY)
+                        </h3>
+                        <p className="text-[10px] text-text-muted mt-0.5">
+                          Public provider responses evaluated during scan. If unverified on-chain, metrics do not override contract verdict.
+                        </p>
+                      </div>
+                      <span className="font-mono text-[10px] text-primary-container px-2 py-0.5 rounded bg-primary-container/10 border border-primary-container/20 shrink-0">
                         AUTHORITATIVE PROVIDERS
                       </span>
                     </div>
@@ -935,8 +945,15 @@ export default function App() {
 
                       return (
                         <div className="mt-4 pt-3 border-t border-border-subtle/40">
-                          <div className="text-[10px] font-mono text-text-muted uppercase font-bold mb-2">
-                            MARKET &amp; CONTRACT METRICS:
+                          <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
+                            <div className="text-[10px] font-mono text-text-muted uppercase font-bold">
+                              RAW PROVIDER MARKET METRICS:
+                            </div>
+                            {currentResult.verdict === 'UNKNOWN' && (
+                              <span className="text-[9px] font-mono text-tertiary-fixed bg-tertiary-fixed/10 px-1.5 py-0.5 rounded border border-tertiary-fixed/20 font-bold">
+                                UNVERIFIED ON-CHAIN • FINALIZED VERDICT IS UNKNOWN
+                              </span>
+                            )}
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 font-mono text-xs">
                             <div className="p-2.5 bg-surface-container-highest/30 border border-border-subtle/40 rounded">
